@@ -52,7 +52,7 @@ The dashboard makes external API calls to vendor status endpoints — this is a 
 
 ### Microsoft 365 (special case)
 
-Microsoft's status RSS feed doesn't send the CORS header browsers require for cross-origin requests, so the dashboard can't fetch it directly from the client. To work around this, a GitHub Actions workflow (`.github/workflows/fetch-m365.yml`) runs every 5 minutes, fetches the feed server-side, parses it, and commits the result as `data/m365.json`. The dashboard then reads that JSON file from same-origin, no CORS issue.
+Microsoft's status RSS feed doesn't send the CORS header browsers require for cross-origin requests, so the dashboard can't fetch it directly from the client. To work around this, a GitHub Actions workflow (`.github/workflows/fetch-m365.yml`) runs every 5 minutes, fetches the feed server-side, parses it, and commits the result as `m365.json`. The dashboard then reads that JSON file from same-origin, no CORS issue.
 
 The workflow only commits when the status content actually changes — not on every timestamp tick — so the repo doesn't fill up with noise commits.
 

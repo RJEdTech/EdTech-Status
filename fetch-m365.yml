@@ -19,13 +19,12 @@ jobs:
 
       - name: Fetch and parse M365 RSS
         run: |
-          mkdir -p data
           node <<'EOF'
           const https = require('https');
           const fs = require('fs');
 
           const FEED_URL = 'https://status.cloud.microsoft/feed/rss';
-          const OUT_PATH = 'data/m365.json';
+          const OUT_PATH = 'm365.json';
 
           function fetchUrl(url) {
             return new Promise((resolve, reject) => {
@@ -124,7 +123,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/m365.json
+          git add m365.json
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else

@@ -29,20 +29,52 @@
     line-height: 1.5;
     min-height: 100vh;
   }
-  a { color: inherit; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .mono { font-family: "IBM Plex Mono", "Consolas", "Courier New", monospace; }
-
+  body {
+    /* Subtle crest watermark behind all content. Fixed so it stays in place
+       as the user scrolls. Very low opacity so it doesn't fight the data. */
+    background-image: url('RJHSshield-800.webp');
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-attachment: fixed;
+    background-size: min(70vh, 600px) auto;
+    position: relative;
+  }
+  body::before {
+    /* Dim the watermark with a near-opaque overlay so the logo reads as a
+       very subtle shape, not a competing image. */
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 15, 26, 0.92);
+    pointer-events: none;
+    z-index: 0;
+  }
   .container {
+    position: relative;
+    z-index: 1;
     max-width: 1400px;
     margin: 0 auto;
     padding: 32px 24px 64px 24px;
   }
+  a { color: inherit; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .mono { font-family: "IBM Plex Mono", "Consolas", "Courier New", monospace; }
 
   header.page-head {
     border-bottom: 1px solid var(--border);
     padding-bottom: 24px;
     margin-bottom: 32px;
+  }
+  .brand-row {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+  .brand-logo {
+    height: 56px;
+    width: auto;
+    flex-shrink: 0;
   }
   .head-row {
     display: flex;
@@ -245,6 +277,8 @@
     h1 { font-size: 22px; }
     .grid { grid-template-columns: 1fr; }
     .meta { align-items: flex-start; }
+    .brand-logo { height: 42px; }
+    body { background-size: min(50vh, 320px) auto; }
   }
 </style>
 </head>
@@ -252,6 +286,9 @@
 <div class="container">
 
   <header class="page-head">
+    <div class="brand-row">
+      <img src="RJHS-OFF_B_R__4_.png" alt="Regis Jesuit High School" class="brand-logo">
+    </div>
     <div class="head-row">
       <div>
         <h1>EdTech <span class="accent">Status</span> Dashboard</h1>
@@ -340,13 +377,13 @@ const VENDORS = [
     pageUrl: 'https://status.copyleaks.com/'
   },
 
-  // --- Microsoft 365 (RSS proxied via GitHub Actions to data/m365.json) ---
+  // --- Microsoft 365 (RSS proxied via GitHub Actions to m365.json at root) ---
   {
     id: 'm365',
     name: 'Microsoft 365',
     sub: 'Admin Center status',
     type: 'm365snapshot',
-    apiUrl: 'data/m365.json',
+    apiUrl: 'm365.json',
     pageUrl: 'https://status.cloud.microsoft/'
   },
 
