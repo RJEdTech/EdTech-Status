@@ -1,0 +1,5 @@
+{
+  "_comment": "Populated automatically by .github/workflows/alert-changes.yml. First workflow run after deployment writes the baseline and sends no alerts.",
+  "checkedAt": null,
+  "vendors": null
+}
