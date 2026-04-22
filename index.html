@@ -4,35 +4,126 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EdTech Status Dashboard — RJ</title>
+
+<!-- Theme bootstrap. Runs before <body> renders so we don't get a flash of the
+     wrong theme on load. Reads the persisted choice from localStorage; falls
+     back to the OS-level prefers-color-scheme. -->
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('rj-theme'); // 'light' | 'dark' | null
+      var theme = saved
+        || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+
 <style>
-  :root {
-    --bg: #0f0f1a;
-    --bg-2: #1a1a2a;
-    --red: #C11430;
-    --white: #FFFFFF;
-    --text-strong: #FFFFFF;
-    --text-dim: rgba(255,255,255,0.65);
-    --text-mute: rgba(255,255,255,0.45);
-    --border: rgba(255,255,255,0.10);
-    --border-strong: rgba(255,255,255,0.20);
-    --green: #4ade80;
-    --yellow: #facc15;
-    --orange: #fb923c;
-    --gray: #6b7280;
-    --slate: #64748b;
+  /* ======================================================================
+     PALETTE — strict RJ identity
+     ----------------------------------------------------------------------
+     Chrome (backgrounds, text, borders, accents) uses ONLY:
+       - Raider Red  #C11430
+       - White       #FFFFFF
+       - Black       #000000  (and a near-black #0f0f1a for dark mode bg)
+       - Neutral grays (true grays — no blue tint) for text/border hierarchy
+     Status colors (green / amber / orange / red) are FUNCTIONAL — they
+     appear only on status dots and incident accent borders. They aren't
+     decorative; they're the data.
+     ====================================================================== */
+
+  /* ----- DARK THEME (default) ----- */
+  :root,
+  :root[data-theme="dark"] {
+    --bg:          #0f0f1a;       /* near-black with a faint blue undertone, per RJ design system */
+    --surface:    #16161f;       /* tiles — slightly lifted from bg, no extra hue */
+    --surface-2:  #1c1c25;       /* hovered/elevated state */
+    --border:      rgba(255,255,255,0.08);
+    --border-mid:  rgba(255,255,255,0.16);
+    --border-strong: rgba(255,255,255,0.28);
+
+    --ink:         #ffffff;       /* primary text */
+    --ink-dim:     rgba(255,255,255,0.68);
+    --ink-mute:    rgba(255,255,255,0.42);
+
+    --red:         #C11430;       /* Raider Red — primary accent */
+    --red-soft:    rgba(193,20,48,0.18);
+
+    /* Status — functional only */
+    --ok:          #4ade80;
+    --ok-glow:     rgba(74,222,128,0.35);
+    --warn:        #f5b941;
+    --warn-glow:   rgba(245,185,65,0.35);
+    --alert:       #f97316;
+    --alert-glow:  rgba(249,115,22,0.40);
+    --crit:        #ef4444;
+    --crit-glow:   rgba(239,68,68,0.45);
+    --neutral:     #6b7280;
+    --slate:       #94a3b8;       /* breakage — distinct from "unknown" */
+
+    /* Watermark visibility (lower opacity overlay = more visible crest) */
+    --watermark-overlay: rgba(15,15,26,0.92);
+    --watermark-blend: normal;
   }
+
+  /* ----- LIGHT THEME ----- */
+  :root[data-theme="light"] {
+    --bg:          #ffffff;
+    --surface:     #ffffff;
+    --surface-2:   #f7f7f8;
+    --border:      rgba(0,0,0,0.10);
+    --border-mid:  rgba(0,0,0,0.18);
+    --border-strong: rgba(0,0,0,0.30);
+
+    --ink:         #0f0f1a;
+    --ink-dim:     rgba(15,15,26,0.70);
+    --ink-mute:    rgba(15,15,26,0.48);
+
+    --red:         #C11430;
+    --red-soft:    rgba(193,20,48,0.10);
+
+    --ok:          #16a34a;
+    --ok-glow:     rgba(22,163,74,0.30);
+    --warn:        #ca8a04;
+    --warn-glow:   rgba(202,138,4,0.30);
+    --alert:       #ea580c;
+    --alert-glow:  rgba(234,88,12,0.35);
+    --crit:        #dc2626;
+    --crit-glow:   rgba(220,38,38,0.40);
+    --neutral:     #6b7280;
+    --slate:       #64748b;
+
+    /* In light mode, watermark sits behind a near-white veil and uses
+       multiply blend so the crest reads as a faint red ghost rather than
+       a competing photo. */
+    --watermark-overlay: rgba(255,255,255,0.92);
+    --watermark-blend: multiply;
+  }
+
+  /* ======================================================================
+     RESET + BASE
+     ====================================================================== */
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
   html, body {
     background: var(--bg);
-    color: var(--text-strong);
-    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     font-size: 16px;
     line-height: 1.5;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.18s ease, color 0.18s ease;
   }
+
+  /* Subtle crest watermark behind all content. The overlay color is themed
+     so light mode shows the crest as a faint red ghost (multiply blend on
+     near-white veil) rather than a black blob. Dark mode overlays a deep
+     near-black so the crest reads as a very subtle texture. */
   body {
-    /* Subtle crest watermark behind all content. Fixed so it stays in place
-       as the user scrolls. Very low opacity so it doesn't fight the data. */
     background-image: url('RJHSshield-800.webp');
     background-repeat: no-repeat;
     background-position: center center;
@@ -41,15 +132,15 @@
     position: relative;
   }
   body::before {
-    /* Dim the watermark with a near-opaque overlay so the logo reads as a
-       very subtle shape, not a competing image. */
     content: '';
     position: fixed;
     inset: 0;
-    background: rgba(15, 15, 26, 0.92);
+    background: var(--watermark-overlay);
+    mix-blend-mode: var(--watermark-blend);
     pointer-events: none;
     z-index: 0;
   }
+
   .container {
     position: relative;
     z-index: 1;
@@ -57,114 +148,199 @@
     margin: 0 auto;
     padding: 32px 24px 64px 24px;
   }
+
   a { color: inherit; text-decoration: none; }
   a:hover { text-decoration: underline; }
   .mono { font-family: "IBM Plex Mono", "Consolas", "Courier New", monospace; }
 
+  /* ======================================================================
+     HEADER
+     ====================================================================== */
   header.page-head {
     border-bottom: 1px solid var(--border);
     padding-bottom: 24px;
-    margin-bottom: 32px;
+    margin-bottom: 28px;
   }
+
   .brand-row {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 14px;
     margin-bottom: 18px;
   }
-  .brand-logo {
-    height: 56px;
+
+  /* Logo images. Two variants — white-text for dark mode, black-text for
+     light mode. CSS swaps which one is visible based on the active theme.
+     If either fails to load the onerror handler hides it; we don't render
+     a text fallback, since both logo files are committed to the repo. */
+  .brand-logo-img {
+    height: 52px;
     width: auto;
     flex-shrink: 0;
+    display: block;
   }
+  /* Show only the variant that matches the current theme. */
+  :root[data-theme="dark"]  .brand-logo-light { display: none; }
+  :root[data-theme="light"] .brand-logo-dark  { display: none; }
+
   .head-row {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: flex-end;
     gap: 24px;
     flex-wrap: wrap;
   }
+  .head-row > div:first-child { min-width: 0; }
+
   h1 {
     font-size: 28px;
     font-weight: 700;
     letter-spacing: -0.01em;
+    color: var(--ink);
   }
   h1 .accent { color: var(--red); }
+
   .subtitle {
-    color: var(--text-dim);
+    color: var(--ink-dim);
     font-size: 14px;
     margin-top: 6px;
   }
+
+  /* Right-side meta: theme toggle + refresh button + last-checked timestamp */
   .meta {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 10px;
     font-size: 13px;
-    color: var(--text-dim);
+    color: var(--ink-dim);
   }
-  .last-checked { font-family: "IBM Plex Mono", monospace; }
-  .refresh-btn {
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .last-checked {
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  /* Buttons share a base, then specialize. */
+  .btn {
     background: transparent;
-    border: 1px solid var(--border-strong);
-    color: var(--text-strong);
-    padding: 8px 14px;
+    border: 1px solid var(--border-mid);
+    color: var(--ink);
+    padding: 7px 12px;
     font-family: "Segoe UI", sans-serif;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    border-radius: 0;        /* RJ tools use square corners */
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
-  .refresh-btn:hover {
+  .btn:hover {
     border-color: var(--red);
     color: var(--red);
   }
-  .refresh-btn:disabled {
+  .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
+  .btn:disabled:hover {
+    border-color: var(--border-mid);
+    color: var(--ink);
+  }
 
-  /* Overall summary banner */
-  .summary {
-    background: var(--bg-2);
+  /* Icon-only theme toggle — square, same height as the refresh button so
+     they line up cleanly. */
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+  .btn-icon svg { width: 16px; height: 16px; }
+  /* Sun shows in dark mode (click to go light), moon shows in light mode. */
+  :root[data-theme="dark"]  .btn-icon .icon-moon { display: none; }
+  :root[data-theme="light"] .btn-icon .icon-sun  { display: none; }
+
+  /* ======================================================================
+     PLAIN-ENGLISH BANNER
+     ----------------------------------------------------------------------
+     Top-of-page status sentence. Big icon + headline + detail. The icon
+     and headline color reflect the worst severity in the portfolio
+     (tier-weighted in JS — Canvas down rings louder than Gimkit down).
+     ====================================================================== */
+  .plain-banner {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 22px 24px;
+    margin-bottom: 32px;
+    background: var(--surface);
     border: 1px solid var(--border);
-    padding: 20px 24px;
-    margin-bottom: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    flex-wrap: wrap;
+    border-left: 4px solid var(--neutral);   /* color set by JS based on overall severity */
+    transition: border-color 0.18s ease, background-color 0.18s ease;
   }
-  .summary-left {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-  .summary-dot {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
+  .plain-banner.is-ok       { border-left-color: var(--ok); }
+  .plain-banner.is-warn     { border-left-color: var(--warn); }
+  .plain-banner.is-alert    { border-left-color: var(--alert); }
+  .plain-banner.is-crit     { border-left-color: var(--crit); }
+  .plain-banner.is-unknown  { border-left-color: var(--neutral); }
+
+  .plain-banner-icon {
     flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--ink);
+    font-size: 22px;
+    line-height: 1;
   }
-  .summary-text {
-    font-size: 16px;
-    font-weight: 600;
+  .plain-banner.is-ok    .plain-banner-icon { background: var(--ok);    color: #fff; }
+  .plain-banner.is-warn  .plain-banner-icon { background: var(--warn);  color: #fff; }
+  .plain-banner.is-alert .plain-banner-icon { background: var(--alert); color: #fff; }
+  .plain-banner.is-crit  .plain-banner-icon { background: var(--crit);  color: #fff; }
+
+  .plain-banner-text {
+    flex: 1;
+    min-width: 0;
   }
-  .summary-counts {
+  .plain-banner-headline {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.3;
+  }
+  .plain-banner-detail {
     font-size: 13px;
-    color: var(--text-dim);
-    font-family: "IBM Plex Mono", monospace;
+    color: var(--ink-dim);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  .plain-banner-detail:empty { display: none; }
+  .plain-banner-detail .vendor-name {
+    font-weight: 600;
+    color: var(--ink);
   }
 
-  /* Section labels — flex layout so we can show a small note next to the title */
+  /* ======================================================================
+     SECTION HEADERS
+     ====================================================================== */
   .section-label {
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--text-mute);
-    margin: 36px 0 14px 0;
+    color: var(--ink-mute);
+    margin: 32px 0 14px 0;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--border);
     display: flex;
@@ -179,160 +355,125 @@
     font-weight: 400;
     letter-spacing: 0.04em;
     text-transform: none;
-    color: var(--text-mute);
+    color: var(--ink-mute);
     font-style: italic;
   }
 
-  /* Grids — three flavors driving tile density. Critical packs ~2-3 across
-     (biggest tiles), core packs ~3-4 across (medium), secondary ~4-5 across
-     (compact). */
-  .grid {
-    display: grid;
-    gap: 14px;
-  }
-  .grid-critical {
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    gap: 18px;
-  }
-  .grid-core {
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 14px;
-  }
-  .grid-secondary {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 10px;
-  }
-  /* Infrastructure tier — same compact density as secondary, but visually
-     distinguished by the section header note. Tiles themselves render with
-     a dimmer border to signal "context, not primary signal." */
-  .grid-infra {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 10px;
-  }
+  /* Hide a section entirely if it has no tiles assigned (no vendors with
+     that task) — JS adds .is-empty when its grid is empty. Prevents a
+     stranded section header from sitting alone with nothing below it. */
+  .section-label.is-empty,
+  .grid-task.is-empty { display: none; }
 
-  /* Tile — base styles. Tier-specific overrides below scale typography and
-     padding so the visual hierarchy reads at a glance. */
+  /* ======================================================================
+     GRID — task-based (single density)
+     ----------------------------------------------------------------------
+     One grid layout for all task sections. Tiles flex their height based
+     on the .compact / .full classes JS adds per tile (compact = small
+     "all good" pill, full = expanded with incident details).
+     ====================================================================== */
+  .grid { display: grid; gap: 14px; }
+  .grid-task {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  /* Behind-the-scenes (infra) section: same density but a touch more compact. */
+  #taskGrid-infra { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+
+  /* ======================================================================
+     TILES
+     ----------------------------------------------------------------------
+     Tiles use plain surface backgrounds and a subtle border. Severity is
+     communicated by (a) the colored dot and (b) a colored left border that
+     appears only when something is wrong. A green dot doesn't need a green
+     border — green borders everywhere would shout "everything is alarming."
+     ====================================================================== */
   .tile {
-    background: var(--bg-2);
+    background: var(--surface);
     border: 1px solid var(--border);
-    padding: 18px 20px;
+    padding: 16px 18px;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    transition: border-color 0.15s ease;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
     position: relative;
   }
-  .tile:hover { border-color: var(--border-strong); }
-  .tile.is-incident { border-left: 3px solid var(--red); padding-left: 18px; }
-  .tile.is-degraded { border-left: 3px solid var(--yellow); padding-left: 18px; }
-  .tile.is-breakage { border-left: 3px solid var(--slate); padding-left: 18px; }
+  .tile:hover {
+    border-color: var(--border-mid);
+    background: var(--surface-2);
+  }
 
-  /* Critical tier — biggest, most prominent. Slightly thicker incident border too. */
-  .tile.tier-critical {
-    padding: 24px 26px;
-    gap: 14px;
+  /* Incident accents — colored left border. Only shown when the tile is
+     actually reporting a problem. */
+  .tile.is-incident { border-left: 3px solid var(--crit);  padding-left: 16px; }
+  .tile.is-degraded { border-left: 3px solid var(--warn);  padding-left: 16px; }
+  .tile.is-breakage { border-left: 3px solid var(--slate); padding-left: 16px; }
+
+  /* Tile mode: compact (single-line "All good" pill) vs full (expanded card
+     with status text, incident details, links). Operational tiles render
+     compact; anything with an issue, breakage, unknown status, or extra
+     metadata (infra correlation, link-only) renders full. */
+  .tile.is-compact {
+    padding: 10px 14px;
+    gap: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
   }
-  .tile.tier-critical.is-incident { border-left-width: 4px; padding-left: 25px; }
-  .tile.tier-critical.is-degraded { border-left-width: 4px; padding-left: 25px; }
-  .tile.tier-critical.is-breakage { border-left-width: 4px; padding-left: 25px; }
-  .tile.tier-critical .tile-name {
-    font-size: 19px;
-  }
-  .tile.tier-critical .tile-sub {
+  .tile.is-compact .tile-row { flex: 1; min-width: 0; }
+  .tile.is-compact .tile-name {
     font-size: 13px;
+    font-weight: 600;
   }
-  .tile.tier-critical .status-text {
-    font-size: 14px;
+  .tile.is-compact .tile-sub { display: none; }
+  .tile.is-compact .status-row {
+    flex-shrink: 0;
+    margin-left: 12px;
   }
-  .tile.tier-critical .dot {
-    width: 12px;
-    height: 12px;
+  .tile.is-compact .status-text {
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    font-weight: 500;
   }
+  .tile.is-compact .dot { width: 8px; height: 8px; }
+  .tile.is-compact .tile-incident,
+  .tile.is-compact .tile-footer { display: none; }
 
-  /* Core tier — medium */
-  .tile.tier-core {
+  /* Full mode — default tile rendering with all the detail. */
+  .tile.is-full .tile-name { font-size: 15px; }
+  .tile.is-full .tile-sub  { font-size: 12px; }
+
+  /* Critical-when-broken: a tile that's reporting a real issue gets an extra
+     visual lift to draw the eye, regardless of which task section it's in. */
+  .tile.is-incident.is-full,
+  .tile.is-degraded.is-full {
     padding: 18px 20px;
-    gap: 10px;
+    gap: 12px;
   }
-  .tile.tier-core .tile-name {
-    font-size: 16px;
-  }
-  .tile.tier-core .status-text {
-    font-size: 13px;
+  .tile.is-incident.is-full .tile-name,
+  .tile.is-degraded.is-full .tile-name { font-size: 17px; }
+  .tile.is-incident.is-full .status-text,
+  .tile.is-degraded.is-full .status-text { font-size: 14px; }
+  .tile.is-incident.is-full .dot,
+  .tile.is-degraded.is-full .dot { width: 11px; height: 11px; }
+
+  /* Infra tiles get a slightly recessed surface even in full mode — they're
+     context, not primary signal. */
+  .tile.is-infra-tile {
+    background: var(--surface-2);
   }
 
-  /* Secondary tier — compact */
-  .tile.tier-secondary {
-    padding: 12px 14px;
-    gap: 6px;
-  }
-  .tile.tier-secondary .tile-name {
-    font-size: 13px;
-  }
-  .tile.tier-secondary .tile-sub {
-    font-size: 11px;
-    margin-top: 1px;
-  }
-  .tile.tier-secondary .status-text {
-    font-size: 12px;
-  }
-  .tile.tier-secondary .dot {
-    width: 8px;
-    height: 8px;
-  }
-  .tile.tier-secondary .tile-incident {
-    font-size: 11px;
-  }
-  .tile.tier-secondary .tile-footer {
-    font-size: 11px;
-  }
-
-  /* Infrastructure tier — compact like secondary, but dimmer border by default
-     to communicate "context layer, not primary alert." When these tiles DO
-     report issues, they still get the colored incident border via .is-incident
-     etc., same as any other tile. */
-  .tile.tier-infra {
-    padding: 12px 14px;
-    gap: 6px;
-    border-color: rgba(255,255,255,0.06);
-    background: rgba(26, 26, 42, 0.6);
-  }
-  .tile.tier-infra:hover { border-color: var(--border); }
-  .tile.tier-infra .tile-name {
-    font-size: 13px;
-  }
-  .tile.tier-infra .tile-sub {
-    font-size: 11px;
-    margin-top: 1px;
-  }
-  .tile.tier-infra .status-text {
-    font-size: 12px;
-  }
-  .tile.tier-infra .dot {
-    width: 8px;
-    height: 8px;
-  }
-  .tile.tier-infra .tile-incident {
-    font-size: 11px;
-  }
-  .tile.tier-infra .tile-footer {
-    font-size: 11px;
-  }
-  /* Dependents badge — appears on an infra tile when we detect that a
-     service depending on this infra is ALSO reporting issues. The badge is
-     small and muted on its own, but lights up red/orange when correlated. */
+  /* Correlation badge inside infra tiles */
   .tile-correlation {
     font-size: 11px;
-    color: var(--text-dim);
+    color: var(--ink-dim);
     border-top: 1px solid var(--border);
     padding-top: 8px;
     margin-top: 2px;
     line-height: 1.4;
   }
-  .tile-correlation.is-correlated {
-    color: var(--orange);
-  }
-  .tile-correlation strong { color: var(--text-strong); }
+  .tile-correlation.is-correlated { color: var(--alert); }
+  .tile-correlation strong { color: var(--ink); }
 
   .tile-row {
     display: flex;
@@ -344,13 +485,17 @@
     font-size: 16px;
     font-weight: 600;
     line-height: 1.2;
+    color: var(--ink);
   }
   .tile-sub {
     font-size: 12px;
-    color: var(--text-mute);
+    color: var(--ink-mute);
     margin-top: 2px;
   }
 
+  /* ======================================================================
+     STATUS DOTS — functional color
+     ====================================================================== */
   .status-row {
     display: flex;
     align-items: center;
@@ -362,18 +507,17 @@
     border-radius: 50%;
     flex-shrink: 0;
   }
-  .dot.operational { background: var(--green); box-shadow: 0 0 8px rgba(74,222,128,0.4); }
-  .dot.degraded    { background: var(--yellow); box-shadow: 0 0 8px rgba(250,204,21,0.4); }
-  .dot.partial     { background: var(--orange); box-shadow: 0 0 8px rgba(251,146,60,0.4); }
-  .dot.major       { background: var(--red); box-shadow: 0 0 10px rgba(193,20,48,0.5); }
-  .dot.unknown     { background: var(--gray); }
-  .dot.linkonly    { background: transparent; border: 1px solid var(--text-mute); }
-  /* Breakage = our scraper can't read the source. Distinct from outage colors
-     (red/orange/yellow) and from "unknown/loading" (gray). Slate with a wrench
-     glyph rendered via CSS so we don't need an icon font dependency. */
+  .dot.operational { background: var(--ok);    box-shadow: 0 0 8px var(--ok-glow); }
+  .dot.degraded    { background: var(--warn);  box-shadow: 0 0 8px var(--warn-glow); }
+  .dot.partial     { background: var(--alert); box-shadow: 0 0 8px var(--alert-glow); }
+  .dot.major       { background: var(--crit);  box-shadow: 0 0 10px var(--crit-glow); }
+  .dot.unknown     { background: var(--neutral); }
+  .dot.linkonly    { background: transparent; border: 1px solid var(--ink-mute); }
+
+  /* Breakage = scraper can't read source. Slate dot with a wrench glyph. */
   .dot.breakage {
     background: var(--slate);
-    box-shadow: 0 0 8px rgba(100,116,139,0.4);
+    box-shadow: 0 0 8px rgba(148,163,184,0.4);
     position: relative;
   }
   .dot.breakage::after {
@@ -389,55 +533,66 @@
   .status-text {
     font-size: 13px;
     font-weight: 600;
-    color: var(--text-strong);
+    color: var(--ink);
   }
-  .status-text.muted { color: var(--text-dim); font-weight: 500; }
+  .status-text.muted {
+    color: var(--ink-dim);
+    font-weight: 500;
+  }
 
   .tile-incident {
     font-size: 12px;
-    color: var(--text-dim);
+    color: var(--ink-dim);
     border-top: 1px solid var(--border);
     padding-top: 10px;
     margin-top: 4px;
   }
-  .tile-incident strong { color: var(--text-strong); }
+  .tile-incident strong { color: var(--ink); }
 
   .tile-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-size: 11px;
-    color: var(--text-mute);
+    color: var(--ink-mute);
     margin-top: auto;
     padding-top: 8px;
   }
   .tile-link {
-    color: var(--text-dim);
+    color: var(--ink-dim);
     font-size: 12px;
     font-weight: 500;
   }
   .tile-link:hover { color: var(--red); text-decoration: none; }
   .tile-link::after { content: " →"; }
 
-  .tile.linkonly .status-text { color: var(--text-dim); }
+  .tile.linkonly .status-text { color: var(--ink-dim); }
 
-  /* Footer disclaimer */
+  /* ======================================================================
+     FOOTER
+     ====================================================================== */
   footer.page-foot {
     margin-top: 48px;
     padding-top: 24px;
     border-top: 1px solid var(--border);
     font-size: 12px;
-    color: var(--text-mute);
+    color: var(--ink-mute);
     line-height: 1.6;
   }
-  footer.page-foot strong { color: var(--text-dim); }
+  footer.page-foot strong { color: var(--ink-dim); }
+  footer.page-foot p + p { margin-top: 10px; }
 
+  /* ======================================================================
+     RESPONSIVE
+     ====================================================================== */
   @media (max-width: 600px) {
     .container { padding: 20px 14px 40px 14px; }
     h1 { font-size: 22px; }
     .grid { grid-template-columns: 1fr; }
     .meta { align-items: flex-start; }
-    .brand-logo { height: 42px; }
+    .head-row { align-items: flex-start; }
+    .brand-logo-img { height: 42px; }
+    .brand-wordmark svg { height: 36px; }
     body { background-size: min(50vh, 320px) auto; }
   }
 </style>
@@ -447,61 +602,143 @@
 
   <header class="page-head">
     <div class="brand-row">
-      <img src="RJHS-OFF_B_R__4_.png" alt="Regis Jesuit High School" class="brand-logo">
+      <!-- Two logo variants, one shown per theme. Filenames match what's
+           committed to the repo (RJHS-OFF B&R (4).png — note the spaces
+           and ampersand which require URL encoding). -->
+      <img
+        src="RJHS-OFF%20B%26R%20(4).png"
+        alt="Regis Jesuit High School"
+        class="brand-logo-img brand-logo-dark"
+        onerror="this.style.display='none';">
+      <img
+        src="rjhs-logo.jpg"
+        alt="Regis Jesuit High School"
+        class="brand-logo-img brand-logo-light"
+        onerror="this.style.display='none';">
     </div>
+
     <div class="head-row">
       <div>
         <h1>EdTech <span class="accent">Status</span> Dashboard</h1>
         <div class="subtitle">Live status for the tools in our portfolio. Auto-refreshes every 5 minutes.</div>
       </div>
+
       <div class="meta">
-        <button class="refresh-btn" id="refreshBtn">↻ Refresh now</button>
+        <div class="meta-row">
+          <!-- Theme toggle: shows sun icon in dark mode, moon in light mode -->
+          <button class="btn btn-icon" id="themeBtn" type="button"
+                  aria-label="Toggle light and dark theme" title="Toggle theme">
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+            </svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </button>
+          <button class="btn" id="refreshBtn" type="button">↻ Refresh now</button>
+        </div>
         <div class="last-checked" id="lastChecked">Loading…</div>
       </div>
     </div>
   </header>
 
-  <div class="summary" id="summary">
-    <div class="summary-left">
-      <div class="summary-dot" id="summaryDot" style="background: var(--gray);"></div>
-      <div class="summary-text" id="summaryText">Checking status…</div>
+  <!-- Plain-English banner — single sentence at the top tells a teacher
+       whether they can teach normally today. Driven by renderPlainBanner()
+       which reads the worst severity weighted by tier (so Canvas down rings
+       louder than Gimkit down). -->
+  <div class="plain-banner" id="plainBanner">
+    <div class="plain-banner-icon" id="plainBannerIcon">
+      <!-- Filled in by JS based on overall status -->
     </div>
-    <div class="summary-counts" id="summaryCounts"></div>
+    <div class="plain-banner-text">
+      <div class="plain-banner-headline" id="plainBannerHeadline">Checking status…</div>
+      <div class="plain-banner-detail" id="plainBannerDetail"></div>
+    </div>
   </div>
 
-  <div class="section-label">
-    <span>Critical services</span>
-    <span class="section-label-note">School-day-blocking if any are down</span>
-  </div>
-  <div class="grid grid-critical" id="criticalGrid"></div>
+  <!-- ================================================================
+       Task-based sections.
+       Each section corresponds to a teaching task. Tools are tagged with
+       a `task` field in the VENDORS array (in the script below). The
+       rendering function reads that field instead of the old `tier`
+       field for layout grouping.
+
+       Tier is still used for the summary banner's severity weighting
+       (Canvas-down rings louder than Gimkit-down) — that hasn't changed.
+       What changed is how teachers SEE the tools.
+
+       Sign-in is its own section because when it's down everything
+       cascades — but it's only one tile, so it sits inline above
+       "Teach today" rather than getting its own header.
+       ================================================================ -->
 
   <div class="section-label">
-    <span>Core services</span>
-    <span class="section-label-note">Significant impact when down</span>
+    <span>Sign in &amp; teach today</span>
+    <span class="section-label-note">Everything you need for class to happen</span>
   </div>
-  <div class="grid grid-core" id="coreGrid"></div>
+  <div class="grid grid-task" id="taskGrid-teach"></div>
 
   <div class="section-label">
-    <span>Secondary tools</span>
-    <span class="section-label-note">Canvas integrations and side tools</span>
+    <span>Email &amp; files</span>
+    <span class="section-label-note">Outlook, OneDrive, SharePoint</span>
   </div>
-  <div class="grid grid-secondary" id="secondaryGrid"></div>
+  <div class="grid grid-task" id="taskGrid-files"></div>
 
   <div class="section-label">
-    <span>Supporting infrastructure</span>
-    <span class="section-label-note">Context, not alert — issues here only matter when tools above are also affected</span>
+    <span>Quizzes &amp; assessments</span>
+    <span class="section-label-note">LockDown Browser, Copyleaks, AspirEDU, DeltaMath</span>
   </div>
-  <div class="grid grid-infra" id="infraGrid"></div>
+  <div class="grid grid-task" id="taskGrid-assess"></div>
+
+  <div class="section-label">
+    <span>Student practice &amp; games</span>
+    <span class="section-label-note">IXL, Kahoot, Quizizz, Gimkit, NoRedInk, Gizmos</span>
+  </div>
+  <div class="grid grid-task" id="taskGrid-practice"></div>
+
+  <div class="section-label">
+    <span>Creative &amp; music</span>
+    <span class="section-label-note">Soundtrap</span>
+  </div>
+  <div class="grid grid-task" id="taskGrid-creative"></div>
+
+  <div class="section-label">
+    <span>Records &amp; gradebook</span>
+    <span class="section-label-note">Blackbaud — SIS, attendance, grades</span>
+  </div>
+  <div class="grid grid-task" id="taskGrid-records"></div>
+
+  <div class="section-label">
+    <span>Behind the scenes</span>
+    <span class="section-label-note">Infrastructure that runs the tools above — only matters if those go red too</span>
+  </div>
+  <div class="grid grid-task" id="taskGrid-infra"></div>
 
   <footer class="page-foot">
-    <p><strong>About this dashboard.</strong> Status pages reflect what vendors choose to report and can lag actual outages by 30 minutes or more. Treat this as a first signal, not a definitive answer. If teachers report a problem and the tile is still green, the problem is real.</p>
-    <p style="margin-top: 10px;"><strong>Why tools are tiered.</strong> Critical services (Microsoft sign-in, OneDrive/SharePoint, Outlook, Canvas) stop the school day if they're down. Core services (Teams, Blackbaud, Vivi, Flint) cause significant disruption but teaching can continue. Secondary tools affect individual classes at most. The summary banner weights these accordingly — a Canvas outage rings louder than a Gimkit outage even at the same severity.</p>
-    <p style="margin-top: 10px;"><strong>Microsoft 365 is split into four tiles.</strong> Each tile reads from the same M365 RSS feed but filters for items relevant to that service (Entra/sign-in, OneDrive/SharePoint, Exchange/Outlook, Teams). Other M365 services Microsoft reports on (Power BI, Yammer, etc.) are intentionally not surfaced — they don't affect teaching.</p>
-    <p style="margin-top: 10px;"><strong>Supporting infrastructure is context, not alert.</strong> AWS and Cloudflare underpin many of the tools above (Canvas, NoRedInk, Quizizz, and others). Issues at this layer don't necessarily mean anything is broken at Regis Jesuit — Cloudflare and AWS can have regional problems that never reach Aurora. These tiles exist to explain outages higher up. When a tool goes red <em>and</em> its infrastructure dependency is also red, the banner notes "possible upstream cause" so you know the root issue may not be the tool itself.</p>
-    <p style="margin-top: 10px;">Built and maintained by Jason Beyer · RJEdTech</p>
+    <p><strong>How to use this page.</strong> Before troubleshooting a tool that isn't working, glance here. If the tile is red or yellow, the vendor is reporting a known issue — it's not just you. If the tile is green and you're still having trouble, the problem is real; status pages can lag actual outages by 30 minutes or more.</p>
+    <p><strong>What the colors mean.</strong> <span style="color: var(--ok); font-weight: 600;">Green</span> = working. <span style="color: var(--warn); font-weight: 600;">Yellow</span> = degraded (slower or partial features). <span style="color: var(--alert); font-weight: 600;">Orange</span> = partial outage. <span style="color: var(--crit); font-weight: 600;">Red</span> = down. Slate with a wrench = our status check is broken (vendor itself may be fine; click through to verify).</p>
+    <p><strong>Why "Behind the scenes" exists.</strong> AWS and Cloudflare run a lot of the tools above (Canvas, NoRedInk, Quizizz, and others). When something at this layer breaks, it can take tools down with it. You generally don't need to look here unless one of the tools you're using has gone red — then check whether infrastructure is also red, which means the problem may not be with the tool itself.</p>
+    <p>Built and maintained by Jason Beyer · RJEdTech</p>
   </footer>
 
 </div>
+
+<!-- Theme toggle handler. Persists choice; no-ops gracefully if storage blocked. -->
+<script>
+  (function () {
+    var btn = document.getElementById('themeBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      var next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('rj-theme', next); } catch (e) { /* private mode etc — silently fall through */ }
+    });
+  })();
+</script>
 
 <script>
 //=============================================================================
@@ -535,6 +772,7 @@ const VENDORS = [
   // ============================================================
   {
     id: 'm365_entra',
+    task: 'teach',
     name: 'Microsoft sign-in',
     sub: 'Entra ID — auth foundation for everything',
     tier: 'critical',
@@ -545,6 +783,7 @@ const VENDORS = [
   },
   {
     id: 'm365_sharepoint',
+    task: 'files',
     name: 'OneDrive / SharePoint',
     sub: 'Where student work lives',
     tier: 'critical',
@@ -555,6 +794,7 @@ const VENDORS = [
   },
   {
     id: 'm365_exchange',
+    task: 'files',
     name: 'Exchange / Outlook',
     sub: 'Mail and calendar',
     tier: 'critical',
@@ -565,6 +805,7 @@ const VENDORS = [
   },
   {
     id: 'instructure',
+    task: 'teach',
     name: 'Canvas',
     sub: 'Instructure — global status',
     tier: 'critical',
@@ -580,6 +821,7 @@ const VENDORS = [
   // ============================================================
   {
     id: 'm365_teams',
+    task: 'teach',
     name: 'Microsoft Teams',
     sub: 'Staff comms, DECA, meetings',
     tier: 'core',
@@ -598,6 +840,7 @@ const VENDORS = [
     // If we ever want to scope down to specific components, switch to summary.json
     // and filter by component group ID.
     id: 'blackbaud',
+    task: 'records',
     name: 'Blackbaud',
     sub: 'SIS, LMS, EMS, financials, ID',
     tier: 'core',
@@ -609,6 +852,7 @@ const VENDORS = [
   },
   {
     id: 'vivi',
+    task: 'teach',
     name: 'Vivi',
     sub: 'Wireless display & screen mirroring',
     tier: 'core',
@@ -620,6 +864,7 @@ const VENDORS = [
   },
   {
     id: 'flint',
+    task: 'teach',
     name: 'Flint',
     sub: 'flintk12.com',
     tier: 'core',
@@ -635,6 +880,7 @@ const VENDORS = [
   // ============================================================
   {
     id: 'respondus',
+    task: 'assess',
     name: 'Respondus',
     sub: 'LockDown Browser & Monitor',
     tier: 'secondary',
@@ -646,6 +892,7 @@ const VENDORS = [
   },
   {
     id: 'copyleaks',
+    task: 'assess',
     name: 'Copyleaks',
     sub: 'AI detection & plagiarism',
     tier: 'secondary',
@@ -655,6 +902,7 @@ const VENDORS = [
   },
   {
     id: 'aspiredu',
+    task: 'assess',
     name: 'AspirEDU',
     sub: 'Grade Guardian, Dropout Detective',
     tier: 'secondary',
@@ -665,6 +913,7 @@ const VENDORS = [
   },
   {
     id: 'explorelearning',
+    task: 'practice',
     name: 'ExploreLearning',
     sub: 'Gizmos, Reflex, Frax',
     tier: 'secondary',
@@ -676,6 +925,7 @@ const VENDORS = [
   // JSON endpoint, so we scrape the inline JS blob via GitHub Actions to ixl.json)
   {
     id: 'ixl',
+    task: 'practice',
     name: 'IXL',
     sub: 'status.ixl.com',
     tier: 'secondary',
@@ -685,6 +935,7 @@ const VENDORS = [
   },
   {
     id: 'kahoot',
+    task: 'practice',
     name: 'Kahoot',
     sub: 'Game-based learning',
     tier: 'secondary',
@@ -699,6 +950,7 @@ const VENDORS = [
   // so we label it Quizizz with a sub-line noting the rebrand.
   {
     id: 'quizizz',
+    task: 'practice',
     name: 'Quizizz',
     sub: 'Now branded "Wayground"',
     tier: 'secondary',
@@ -710,6 +962,7 @@ const VENDORS = [
   // endpoint, so we scrape the rendered banner via GitHub Actions to gimkit.json)
   {
     id: 'gimkit',
+    task: 'practice',
     name: 'Gimkit',
     sub: 'Game-based learning & 2D modes',
     tier: 'secondary',
@@ -721,6 +974,7 @@ const VENDORS = [
   // available, so we can detect operational vs not-operational but no severity nuance)
   {
     id: 'soundtrap',
+    task: 'creative',
     name: 'Soundtrap',
     sub: 'Music creation & podcasting',
     tier: 'secondary',
@@ -733,6 +987,7 @@ const VENDORS = [
   // we have live parsing of the vendor's own status page.)
   {
     id: 'noredink',
+    task: 'practice',
     name: 'NoRedInk',
     sub: 'Grammar & writing practice',
     tier: 'secondary',
@@ -746,6 +1001,7 @@ const VENDORS = [
   // tile until we discovered DeltaMath has its own first-party status page.)
   {
     id: 'deltamath',
+    task: 'assess',
     name: 'DeltaMath',
     sub: 'status.deltamath.com',
     tier: 'secondary',
@@ -773,6 +1029,7 @@ const VENDORS = [
   // as context.
   {
     id: 'aws',
+    task: 'infra',
     name: 'AWS',
     sub: 'Amazon Web Services — hosts Canvas, NoRedInk, Quizizz, more',
     tier: 'infra',
@@ -785,6 +1042,7 @@ const VENDORS = [
   // the same fetchStatuspage() code path as Canvas, Blackbaud, etc.
   {
     id: 'cloudflare',
+    task: 'infra',
     name: 'Cloudflare',
     sub: 'Fronts many of our vendor sites',
     tier: 'infra',
@@ -1705,18 +1963,38 @@ function renderTile(vendor, result) {
   const tile = document.createElement('div');
   tile.className = 'tile';
 
-  // Tier class drives compact-vs-prominent sizing (see CSS .tier-critical / .tier-core / .tier-secondary)
-  if (vendor.tier) {
-    tile.classList.add('tier-' + vendor.tier);
-  }
+  // Decide visual mode for this tile.
+  //
+  // Compact pill (single line, dim status text): the green "all good" state
+  // for tools where there's nothing the teacher needs to read. Saves a ton of
+  // vertical space when most things are operational, which is the common case.
+  //
+  // Full card: anything with a real issue, an unknown/breakage state, or
+  // metadata that needs surfacing (incident name, infra correlation, link-only).
+  // The teacher SHOULD see this expanded so they can act on it.
+  //
+  // Infra tiles are always full because their "depends-on" line carries info
+  // teachers/IT need even when the tile itself is green.
+  const isInfra = vendor.task === 'infra';
+  const sev = result?.severity;
+  const hasIncident = !!result?.incident;
+  const isProblem = sev === 'major' || sev === 'partial' || sev === 'degraded';
+  const isBreakage = sev === 'breakage';
+  const isUnknown = !result || result.error || sev === 'unknown';
+
+  const mode = (isInfra || isProblem || isBreakage || isUnknown || hasIncident || vendor.type === 'linkonly')
+    ? 'full' : 'compact';
+  tile.classList.add('is-' + mode);
+
+  if (isInfra) tile.classList.add('is-infra-tile');
 
   if (vendor.type === 'linkonly') {
     tile.classList.add('linkonly');
-  } else if (result?.severity === 'breakage') {
+  } else if (isBreakage) {
     tile.classList.add('is-breakage');
-  } else if (result?.severity === 'major' || result?.severity === 'partial') {
+  } else if (sev === 'major' || sev === 'partial') {
     tile.classList.add('is-incident');
-  } else if (result?.severity === 'degraded') {
+  } else if (sev === 'degraded') {
     tile.classList.add('is-degraded');
   }
 
@@ -1757,14 +2035,22 @@ function renderTile(vendor, result) {
     statusText.textContent = result.cached ? severityLabel(result.severity) + ' (cached)' : 'Could not reach status page';
   } else {
     dot.classList.add(result.severity);
-    statusText.textContent = result.statusText || severityLabel(result.severity);
+    // In compact mode, suppress the long status string — green tiles just
+    // get the dot. In full mode, show the actual status text.
+    if (mode === 'compact' && result.severity === 'operational') {
+      statusText.textContent = 'Working';
+    } else {
+      statusText.textContent = result.statusText || severityLabel(result.severity);
+    }
   }
   statusRow.appendChild(dot);
   statusRow.appendChild(statusText);
   tile.appendChild(statusRow);
 
-  // Incident detail
-  if (result?.incident) {
+  // Incident detail (only rendered into the DOM in full mode — compact mode
+  // hides .tile-incident via CSS, but we skip the work entirely when we know
+  // the tile is going to be compact)
+  if (mode === 'full' && result?.incident) {
     const inc = document.createElement('div');
     inc.className = 'tile-incident';
     inc.innerHTML = '<strong>' + escapeHtml(result.incident.name) + '</strong>'
@@ -1773,7 +2059,8 @@ function renderTile(vendor, result) {
     tile.appendChild(inc);
   }
 
-  // Footer
+  // Footer (compact mode hides this via CSS — we still build it so toggling
+  // mode at runtime in the future works without re-rendering)
   const footer = document.createElement('div');
   footer.className = 'tile-footer';
   const links = document.createElement('div');
@@ -1786,7 +2073,7 @@ function renderTile(vendor, result) {
   links.appendChild(main);
   if (vendor.extraLink) {
     const sep = document.createElement('span');
-    sep.style.color = 'var(--text-mute)';
+    sep.style.color = 'var(--ink-mute)';
     sep.style.margin = '0 8px';
     sep.textContent = '·';
     const extra = document.createElement('a');
@@ -1854,240 +2141,232 @@ function detectUpstreamCorrelations(results) {
   return correlations;
 }
 
-function renderSummary(results) {
-  // Split live vendors by tier so the banner can weight critical hardest, then
-  // core, then secondary. Microsoft sign-in down should ring louder than
-  // Blackbaud down should ring louder than Gimkit down — even though all three
-  // would technically register the same severity from their respective
-  // vendor status pages.
-  //
-  // Infrastructure (AWS, Cloudflare) is its own category. Infrastructure issues
-  // don't ESCALATE the banner on their own — a Cloudflare regional problem
-  // that doesn't touch Aurora shouldn't sound an alarm. But when a dependent
-  // service is red and infra is ALSO red, the banner adds a "possible upstream
-  // cause" tail clause (see correlations below).
-  const criticalVendors = VENDORS.filter(v => v.tier === 'critical');
-  const coreVendors = VENDORS.filter(v => v.tier === 'core');
+//=============================================================================
+// PLAIN-ENGLISH BANNER — teacher-facing top-of-page status sentence
+//=============================================================================
+// The banner answers one question for the teacher landing on this page:
+// "Can I teach normally today?"
+//
+// We still tier-weight the underlying severity logic — Canvas down rings
+// louder than Gimkit down — but the OUTPUT is plain language. No counts,
+// no acronyms, no "4/4 ok · 1 issue." Just the headline plus, when needed,
+// a one-line detail naming what's affected.
+//
+// The detail line falls back to "Status pages can lag — if a tool isn't
+// working, that's still real" when everything looks green, so a teacher
+// who's actively experiencing a problem isn't dismissed by a green banner.
+function renderPlainBanner(results) {
+  const banner   = document.getElementById('plainBanner');
+  const iconEl   = document.getElementById('plainBannerIcon');
+  const headline = document.getElementById('plainBannerHeadline');
+  const detail   = document.getElementById('plainBannerDetail');
+
+  // Tier-weighted severity classification — this drives both the headline
+  // tone and the icon/border color. Critical-tier issue overrides everything;
+  // core-tier issue overrides secondary; etc. Same prioritization as the
+  // previous summary banner — only the rendering changed.
+  const criticalVendors  = VENDORS.filter(v => v.tier === 'critical');
+  const coreVendors      = VENDORS.filter(v => v.tier === 'core');
   const secondaryVendors = VENDORS.filter(v => v.tier === 'secondary');
-  const infraVendors = VENDORS.filter(v => v.tier === 'infra');
+  const infraVendors     = VENDORS.filter(v => v.tier === 'infra');
 
-  const criticalResults = criticalVendors.map(v => results[v.id]).filter(Boolean);
-  const coreResults = coreVendors.map(v => results[v.id]).filter(Boolean);
-  const secondaryResults = secondaryVendors.map(v => results[v.id]).filter(Boolean);
-  const infraResults = infraVendors.map(v => results[v.id]).filter(Boolean);
-  const allLiveResults = [...criticalResults, ...coreResults, ...secondaryResults, ...infraResults];
+  const hasIssue = (r) => r && !r.error && ['degraded','partial','major'].includes(r.severity);
+  const affected = (vendorList) => vendorList.filter(v => hasIssue(results[v.id]));
 
-  // Worst-actual-severity per tier (excludes breakage and errors — those are
-  // counted separately because they're meta-problems with the dashboard, not
-  // vendor-confirmed outages).
-  const worstSeverity = (resultsList) => {
-    let worst = 'operational';
-    for (const r of resultsList) {
-      if (r.error || r.severity === 'breakage') continue;
-      if (severityRank(r.severity) > severityRank(worst)) worst = r.severity;
+  const criticalAffected  = affected(criticalVendors);
+  const coreAffected      = affected(coreVendors);
+  const secondaryAffected = affected(secondaryVendors);
+  const infraAffected     = affected(infraVendors);
+
+  // Worst severity across non-infra tiles drives the visual treatment.
+  // Infra alone doesn't escalate — a Cloudflare regional issue that doesn't
+  // touch our tools shouldn't sound the alarm here.
+  const allNonInfra = [...criticalAffected, ...coreAffected, ...secondaryAffected];
+  let worstSev = 'operational';
+  for (const v of allNonInfra) {
+    const r = results[v.id];
+    if (r && severityRank(r.severity) > severityRank(worstSev)) {
+      worstSev = r.severity;
     }
-    return worst;
-  };
-
-  const criticalWorst = worstSeverity(criticalResults);
-  const coreWorst = worstSeverity(coreResults);
-  const secondaryWorst = worstSeverity(secondaryResults);
-
-  const hasIssue = (r) => ['degraded','partial','major'].includes(r.severity) && !r.error;
-  const criticalIssues = criticalResults.filter(hasIssue).length;
-  const coreIssues = coreResults.filter(hasIssue).length;
-  const secondaryIssues = secondaryResults.filter(hasIssue).length;
-  const infraIssues = infraResults.filter(hasIssue).length;
-  const broken = allLiveResults.filter(r => r.severity === 'breakage').length;
-  const operational = allLiveResults.filter(r => r.severity === 'operational' && !r.error).length;
-  const unknown = allLiveResults.filter(r => (r.severity === 'unknown' || r.error) && r.severity !== 'breakage').length;
-
-  // Upstream correlation: any tool + its infra both red? These drive a
-  // "possible upstream cause" tail clause in the banner.
-  const correlations = detectUpstreamCorrelations(results);
-
-  const dot = document.getElementById('summaryDot');
-  const text = document.getElementById('summaryText');
-  const counts = document.getElementById('summaryCounts');
-
-  // Helper: severity → color var. Used to drive the banner dot color from
-  // whichever tier's worst severity wins priority.
-  const sevColor = (sev) => {
-    if (sev === 'major')    return { bg: 'var(--red)',    glow: 'rgba(193,20,48,0.5)' };
-    if (sev === 'partial')  return { bg: 'var(--orange)', glow: 'rgba(251,146,60,0.4)' };
-    if (sev === 'degraded') return { bg: 'var(--yellow)', glow: 'rgba(250,204,21,0.4)' };
-    return null;
-  };
-
-  // Helper: list affected vendor names from a tier (iterates vendors directly
-  // rather than results→vendor lookup, because two vendors can hold === references
-  // to the same result object during cache fallback).
-  const affectedNames = (vendorList) =>
-    vendorList.filter(v => results[v.id] && hasIssue(results[v.id])).map(v => v.name);
-
-  // Build the correlation tail clause once — reused across critical/core/secondary
-  // branches. Phrasing is deliberately hedged ("possible upstream cause") because
-  // we're observing correlation, not diagnosing causation.
-  const correlationTail = () => {
-    if (correlations.length === 0) return null;
-    // Aggregate: which infra providers were implicated across all correlations?
-    const implicatedInfra = new Set();
-    correlations.forEach(c => c.infraNames.forEach(n => implicatedInfra.add(n)));
-    const infraList = [...implicatedInfra];
-    const infraPhrase = infraList.length === 1
-      ? infraList[0] + ' also reporting issues'
-      : infraList.join(' and ') + ' also reporting issues';
-    return infraPhrase + ' — possible upstream cause';
-  };
-
-  // Banner priority order (high to low):
-  //   1. CRITICAL issue → name the affected critical service(s); mention
-  //      core + secondary tails if any; correlation tail if applicable
-  //   2. CORE issue → name the affected core service(s); mention secondary
-  //      if any; explicitly note critical tier is OK; correlation tail
-  //   3. SECONDARY-only issue → "N secondary tool(s) reporting issues" with
-  //      explicit "critical and core services operational" reassurance;
-  //      correlation tail
-  //   4. INFRASTRUCTURE-only issue (nothing dependent is red) → informational
-  //      yellow banner: "Cloudflare reporting issues · no affected tools detected"
-  //   5. BREAKAGE only → meta-problem, slate banner
-  //   6. ALL CLEAR → green
-  //   7. Mixed unknown → gray
-  if (criticalIssues > 0) {
-    // CRITICAL has problems — these get top priority. Use the critical tier's
-    // own worst severity for the dot color, and lead the message with the
-    // actual service names so the reader knows immediately what's broken.
-    const c = sevColor(criticalWorst);
-    dot.style.background = c.bg;
-    dot.style.boxShadow = '0 0 12px ' + c.glow;
-
-    const names = affectedNames(criticalVendors);
-    let msg;
-    if (names.length === 1) {
-      msg = names[0] + ' down';
-    } else if (names.length === 2) {
-      msg = names.join(' and ') + ' down';
-    } else {
-      msg = criticalIssues + ' critical services down';
-    }
-
-    // Tail clauses for additional impact context
-    const tails = [];
-    if (coreIssues > 0) tails.push(coreIssues + ' core service' + (coreIssues === 1 ? '' : 's') + ' also affected');
-    if (secondaryIssues > 0) tails.push(secondaryIssues + ' secondary tool' + (secondaryIssues === 1 ? '' : 's') + ' also affected');
-    const corrTail = correlationTail();
-    if (corrTail) tails.push(corrTail);
-    if (broken > 0) tails.push(broken + ' status check' + (broken === 1 ? '' : 's') + ' broken');
-    if (tails.length > 0) msg += ' · ' + tails.join(' · ');
-
-    text.textContent = msg;
-  } else if (coreIssues > 0) {
-    // CORE has problems but critical is clean. Banner reflects core severity.
-    const c = sevColor(coreWorst);
-    dot.style.background = c.bg;
-    dot.style.boxShadow = '0 0 12px ' + c.glow;
-
-    const names = affectedNames(coreVendors);
-    let msg;
-    if (names.length === 1) {
-      msg = names[0] + ' reporting issues';
-    } else if (names.length === 2) {
-      msg = names.join(' and ') + ' reporting issues';
-    } else {
-      msg = coreIssues + ' core services reporting issues';
-    }
-    msg += ' · critical services operational';
-
-    if (secondaryIssues > 0) msg += ' · ' + secondaryIssues + ' secondary tool' + (secondaryIssues === 1 ? '' : 's') + ' also affected';
-    const corrTail = correlationTail();
-    if (corrTail) msg += ' · ' + corrTail;
-    if (broken > 0) msg += ' · ' + broken + ' status check' + (broken === 1 ? '' : 's') + ' broken';
-
-    text.textContent = msg;
-  } else if (secondaryIssues > 0) {
-    // Only SECONDARY tools — banner color reflects secondary severity but text
-    // explicitly reassures that critical and core are OK.
-    const c = sevColor(secondaryWorst);
-    dot.style.background = c.bg;
-    dot.style.boxShadow = '0 0 12px ' + c.glow;
-    let msg = secondaryIssues + ' secondary tool' + (secondaryIssues === 1 ? '' : 's') + ' reporting issues · critical and core services operational';
-    const corrTail = correlationTail();
-    if (corrTail) msg += ' · ' + corrTail;
-    if (broken > 0) msg += ' · ' + broken + ' status check' + (broken === 1 ? '' : 's') + ' broken';
-    text.textContent = msg;
-  } else if (infraIssues > 0) {
-    // No tools are red but at least one infrastructure tile is. This is the
-    // "Cloudflare has a regional issue that isn't affecting anything we can
-    // see" case. Informational yellow banner, not alarm — explicitly noting
-    // that no dependent tools are affected.
-    dot.style.background = 'var(--yellow)';
-    dot.style.boxShadow = '0 0 12px rgba(250,204,21,0.4)';
-    const infraNames = infraVendors.filter(v => results[v.id] && hasIssue(results[v.id])).map(v => v.name);
-    const phrase = infraNames.length === 1
-      ? infraNames[0] + ' reporting issues'
-      : infraNames.join(' and ') + ' reporting issues';
-    let msg = phrase + ' · no affected tools detected · all tools operational';
-    if (broken > 0) msg += ' · ' + broken + ' status check' + (broken === 1 ? '' : 's') + ' broken';
-    text.textContent = msg;
-  } else if (broken > 0) {
-    // No real outages but at least one scraper is broken.
-    dot.style.background = 'var(--slate)';
-    dot.style.boxShadow = '0 0 12px rgba(100,116,139,0.4)';
-    text.textContent = broken + ' status check' + (broken === 1 ? '' : 's') + ' broken — verify those tools manually';
-  } else if (operational === allLiveResults.length && allLiveResults.length > 0) {
-    dot.style.background = 'var(--green)';
-    dot.style.boxShadow = '0 0 12px rgba(74,222,128,0.4)';
-    text.textContent = 'All monitored tools operational';
-  } else {
-    dot.style.background = 'var(--gray)';
-    dot.style.boxShadow = 'none';
-    text.textContent = 'Status partially available';
   }
 
-  // Counts line: tier-by-tier breakdown so the reader can see health at each
-  // level at a glance. Infrastructure appears after secondary.
-  const criticalOk = criticalResults.filter(r => r.severity === 'operational' && !r.error).length;
-  const coreOk = coreResults.filter(r => r.severity === 'operational' && !r.error).length;
-  const secondaryOk = secondaryResults.filter(r => r.severity === 'operational' && !r.error).length;
-  const infraOk = infraResults.filter(r => r.severity === 'operational' && !r.error).length;
-  const linkOnly = VENDORS.filter(v => v.tier === 'linkonly').length;
+  // Detect upstream correlation (existing logic — kept unchanged) so the
+  // detail line can hint "this might be Cloudflare's fault" when relevant.
+  const correlations = detectUpstreamCorrelations(results);
+  window.__currentCorrelations = correlations;  // still used by infra tile decoration
 
-  let countsLine = 'Critical: ' + criticalOk + '/' + criticalVendors.length + ' ok';
-  if (criticalIssues > 0) countsLine += ' (' + criticalIssues + ' issue' + (criticalIssues === 1 ? '' : 's') + ')';
-  countsLine += ' · Core: ' + coreOk + '/' + coreVendors.length + ' ok';
-  if (coreIssues > 0) countsLine += ' (' + coreIssues + ' issue' + (coreIssues === 1 ? '' : 's') + ')';
-  countsLine += ' · Secondary: ' + secondaryOk + '/' + secondaryVendors.length + ' ok';
-  if (secondaryIssues > 0) countsLine += ' (' + secondaryIssues + ' issue' + (secondaryIssues === 1 ? '' : 's') + ')';
-  countsLine += ' · Infra: ' + infraOk + '/' + infraVendors.length + ' ok';
-  if (infraIssues > 0) countsLine += ' (' + infraIssues + ' issue' + (infraIssues === 1 ? '' : 's') + ')';
-  if (broken > 0) countsLine += ' · ' + broken + ' broken';
-  if (unknown > 0) countsLine += ' · ' + unknown + ' unknown';
-  if (linkOnly > 0) countsLine += ' · ' + linkOnly + ' link-only';
-  counts.textContent = countsLine;
+  // Reset banner classes
+  banner.className = 'plain-banner';
 
-  // Stash correlations for renderAll to use when decorating infra tiles
-  window.__currentCorrelations = correlations;
+  // Helper: format a vendor list as "X", "X and Y", or "X, Y, and Z".
+  const joinNames = (vendors) => {
+    const names = vendors.map(v => v.name);
+    if (names.length === 0) return '';
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return names[0] + ' and ' + names[1];
+    return names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1];
+  };
+
+  // Wrap each name in a span so it bolds in the detail line.
+  const namesHtml = (vendors) => vendors
+    .map(v => '<span class="vendor-name">' + escapeHtml(v.name) + '</span>')
+    .join(', ')
+    .replace(/, ([^,]+)$/, vendors.length > 2 ? ', and $1' : ' and $1');
+
+  // ---------------- CASE: critical service has a real outage ----------------
+  // Headline names the actual service so the teacher knows immediately what's
+  // broken. "Canvas is having issues" is more useful than "Critical service down."
+  if (criticalAffected.length > 0) {
+    const sevClass = worstSev === 'major' ? 'is-crit'
+                   : worstSev === 'partial' ? 'is-alert' : 'is-warn';
+    banner.classList.add(sevClass);
+    iconEl.textContent = worstSev === 'major' ? '!' : '!';
+
+    const verb = worstSev === 'major' ? 'is down' : 'is having issues';
+    if (criticalAffected.length === 1) {
+      headline.textContent = criticalAffected[0].name + ' ' + verb;
+    } else {
+      headline.textContent = joinNames(criticalAffected) + ' are having issues';
+    }
+
+    // Detail: cascade clarification + correlation hint if any
+    let detailParts = [];
+    const entraDown = criticalAffected.some(v => v.id === 'm365_entra');
+    if (entraDown) {
+      detailParts.push('Microsoft sign-in is down — most other tools won\'t work either until this is restored.');
+    } else {
+      detailParts.push('Teaching may be affected for anything that uses ' + namesHtml(criticalAffected) + '.');
+    }
+    if (correlations.length > 0) {
+      const infraNames = [...new Set(correlations.flatMap(c => c.infraNames))];
+      detailParts.push('Possible upstream cause: ' + infraNames.join(', ') + '.');
+    }
+    if (coreAffected.length > 0 || secondaryAffected.length > 0) {
+      const otherCount = coreAffected.length + secondaryAffected.length;
+      detailParts.push('Also affected: ' + otherCount + ' other tool' + (otherCount === 1 ? '' : 's') + ' (see below).');
+    }
+    detail.innerHTML = detailParts.join(' ');
+    return;
+  }
+
+  // ---------------- CASE: core service down (critical clean) ----------------
+  // Teaching can continue — but a meaningful tool is broken. Tone is
+  // serious but not alarming.
+  if (coreAffected.length > 0) {
+    const sevClass = worstSev === 'major' ? 'is-alert'
+                   : worstSev === 'partial' ? 'is-alert' : 'is-warn';
+    banner.classList.add(sevClass);
+    iconEl.textContent = '!';
+
+    if (coreAffected.length === 1) {
+      headline.textContent = coreAffected[0].name + ' is having issues';
+    } else {
+      headline.textContent = joinNames(coreAffected) + ' are having issues';
+    }
+
+    let detailParts = ['You can teach today, but ' + namesHtml(coreAffected) +
+                       ' may not work as expected.'];
+    if (correlations.length > 0) {
+      const infraNames = [...new Set(correlations.flatMap(c => c.infraNames))];
+      detailParts.push('Possible upstream cause: ' + infraNames.join(', ') + '.');
+    }
+    if (secondaryAffected.length > 0) {
+      detailParts.push('Also: ' + secondaryAffected.length + ' student tool' +
+                       (secondaryAffected.length === 1 ? '' : 's') + ' reporting issues.');
+    }
+    detail.innerHTML = detailParts.join(' ');
+    return;
+  }
+
+  // ---------------- CASE: secondary tools only ----------------
+  // Specific student tools have problems. Reassure that the foundational
+  // layer is fine while still naming what's affected.
+  if (secondaryAffected.length > 0) {
+    banner.classList.add('is-warn');
+    iconEl.textContent = '!';
+
+    if (secondaryAffected.length === 1) {
+      headline.textContent = secondaryAffected[0].name + ' is having issues — everything else is working';
+    } else if (secondaryAffected.length <= 3) {
+      headline.textContent = joinNames(secondaryAffected) + ' are having issues — everything else is working';
+    } else {
+      headline.textContent = secondaryAffected.length + ' student tools are having issues — everything else is working';
+    }
+
+    let detailParts = [];
+    if (secondaryAffected.length > 1) {
+      detailParts.push('Affected: ' + namesHtml(secondaryAffected) + '.');
+    }
+    detailParts.push('Canvas, sign-in, email, and core teaching tools are operational.');
+    if (correlations.length > 0) {
+      const infraNames = [...new Set(correlations.flatMap(c => c.infraNames))];
+      detailParts.push('Possible upstream cause: ' + infraNames.join(', ') + '.');
+    }
+    detail.innerHTML = detailParts.join(' ');
+    return;
+  }
+
+  // ---------------- CASE: infra-only issue ----------------
+  // Cloudflare or AWS reports something but none of our tools are visibly
+  // affected. Don't alarm — note it as context.
+  if (infraAffected.length > 0) {
+    banner.classList.add('is-warn');
+    iconEl.textContent = '!';
+    headline.textContent = 'You can teach normally today';
+    detail.innerHTML = joinNames(infraAffected) +
+      ' (which some of our tools depend on) is reporting issues, but no tools we monitor are currently affected.';
+    return;
+  }
+
+  // ---------------- CASE: scraper breakage but no real outages ----------------
+  // The dashboard itself can't read some sources. Note it but don't alarm.
+  const allLive = [...criticalVendors, ...coreVendors, ...secondaryVendors, ...infraVendors];
+  const broken = allLive.filter(v => results[v.id]?.severity === 'breakage');
+  if (broken.length > 0) {
+    banner.classList.add('is-unknown');
+    iconEl.textContent = '?';
+    headline.textContent = 'You can teach normally today';
+    detail.innerHTML = "All tools we can check are working. " + broken.length +
+      " tool" + (broken.length === 1 ? "'s" : "s'") + " status check is broken — those tile" +
+      (broken.length === 1 ? '' : 's') + " below shows last-known status; verify manually if needed.";
+    return;
+  }
+
+  // ---------------- CASE: still loading ----------------
+  const stillLoading = allLive.some(v => !results[v.id]);
+  if (stillLoading && allLive.filter(v => results[v.id]).length === 0) {
+    banner.classList.add('is-unknown');
+    iconEl.textContent = '…';
+    headline.textContent = 'Checking status…';
+    detail.textContent = '';
+    return;
+  }
+
+  // ---------------- CASE: all clear ----------------
+  banner.classList.add('is-ok');
+  iconEl.textContent = '✓';
+  headline.textContent = 'Everything is working — you can teach normally today';
+  detail.textContent = "Status pages can lag real outages. If something isn't working for you, that's real even if it's green here.";
 }
 
+//=============================================================================
+// RENDER ALL TILES — task-based grouping
+//=============================================================================
+// Tiles render into per-task grids. Empty sections (no vendors with that
+// task — shouldn't happen with current config, but safe) hide their header
+// and grid via .is-empty.
+//
+// Within each section: tiles with active issues sort to the top, then
+// breakage/unknown, then operational. Inside the operational group we
+// alpha-sort by name so layout is stable across refreshes.
 function renderAll(results) {
-  const criticalGrid = document.getElementById('criticalGrid');
-  const coreGrid = document.getElementById('coreGrid');
-  const secondaryGrid = document.getElementById('secondaryGrid');
-  const infraGrid = document.getElementById('infraGrid');
-  // linkGrid may not exist in the DOM — the link-only section is removed when
-  // no link-only vendors are configured. Code below is null-safe so adding
-  // another link-only tool back is just a matter of restoring the section
-  // header in the HTML and adding the vendor entry.
-  const linkGrid = document.getElementById('linkOnlyGrid');
-  criticalGrid.innerHTML = '';
-  coreGrid.innerHTML = '';
-  secondaryGrid.innerHTML = '';
-  infraGrid.innerHTML = '';
-  if (linkGrid) linkGrid.innerHTML = '';
+  // Render banner first so window.__currentCorrelations is populated for
+  // infra tile decoration below.
+  renderPlainBanner(results);
+  const correlations = window.__currentCorrelations || [];
 
-  // Sort within each tier: incidents first (worst on top), then operational,
-  // then unknown. Same logic per-tier as before tiers existed; we just apply
-  // it three times so tiers stay visually grouped.
+  // Sort within each task group: incidents first (worst on top), then
+  // operational/unknown. Same per-section logic the old code used per-tier.
   const sortByIncident = (a, b) => {
     const ra = results[a.id] ? severityRank(results[a.id].severity) : -1;
     const rb = results[b.id] ? severityRank(results[b.id].severity) : -1;
@@ -2095,44 +2374,51 @@ function renderAll(results) {
     return a.name.localeCompare(b.name);
   };
 
-  const criticalVendors = VENDORS.filter(v => v.tier === 'critical').sort(sortByIncident);
-  const coreVendors = VENDORS.filter(v => v.tier === 'core').sort(sortByIncident);
-  const secondaryVendors = VENDORS.filter(v => v.tier === 'secondary').sort(sortByIncident);
-  const infraVendors = VENDORS.filter(v => v.tier === 'infra').sort(sortByIncident);
-  const linkOnlyVendors = VENDORS.filter(v => v.tier === 'linkonly');
+  // Discover all task buckets present in VENDORS (avoids a hardcoded list
+  // that could drift from the markup or vendor config).
+  const tasks = [...new Set(VENDORS.map(v => v.task).filter(Boolean))];
 
-  for (const v of criticalVendors) {
-    criticalGrid.appendChild(renderTile(v, results[v.id]));
-  }
-  for (const v of coreVendors) {
-    coreGrid.appendChild(renderTile(v, results[v.id]));
-  }
-  for (const v of secondaryVendors) {
-    secondaryGrid.appendChild(renderTile(v, results[v.id]));
+  for (const task of tasks) {
+    const grid = document.getElementById('taskGrid-' + task);
+    if (!grid) continue;  // markup doesn't have this task — ignore silently
+    grid.innerHTML = '';
+    grid.classList.remove('is-empty');
+
+    const taskVendors = VENDORS.filter(v => v.task === task).sort(sortByIncident);
+    if (taskVendors.length === 0) {
+      // Hide the section header too. Headers sit immediately before each
+      // grid in markup, so previousElementSibling is the .section-label.
+      grid.classList.add('is-empty');
+      const header = grid.previousElementSibling;
+      if (header && header.classList.contains('section-label')) {
+        header.classList.add('is-empty');
+      }
+      continue;
+    }
+
+    for (const v of taskVendors) {
+      const tile = renderTile(v, results[v.id]);
+      // Infra tiles get the depends-on annotation. Same decorator the old
+      // code used; we just call it for any tile in the infra section.
+      if (v.task === 'infra') {
+        decorateInfraTile(tile, v, results, correlations);
+      }
+      grid.appendChild(tile);
+    }
   }
 
-  // Render summary first so window.__currentCorrelations is populated for
-  // infra tile decoration below.
-  renderSummary(results);
-
-  // Infra tiles get an extra correlation line showing which of our monitored
-  // tools depend on this infra provider, and whether any of those dependents
-  // are currently reporting issues (which is the "possible upstream cause"
-  // signal). This gets added AFTER renderSummary because we need the list
-  // of current correlations to know what to highlight.
-  const correlations = window.__currentCorrelations || [];
-  for (const v of infraVendors) {
-    const tile = renderTile(v, results[v.id]);
-    decorateInfraTile(tile, v, results, correlations);
-    infraGrid.appendChild(tile);
-  }
-
+  // Also handle any link-only vendors (none today, but the renderer is
+  // defensive — if linkOnlyGrid existed in markup it would render here).
+  const linkGrid = document.getElementById('linkOnlyGrid');
   if (linkGrid) {
+    linkGrid.innerHTML = '';
+    const linkOnlyVendors = VENDORS.filter(v => v.tier === 'linkonly');
     for (const v of linkOnlyVendors) {
       linkGrid.appendChild(renderTile(v, null));
     }
   }
 }
+
 
 // Add a small line to an infra tile listing which monitored tools depend on
 // this infra provider, and whether any of those dependents are currently red.
