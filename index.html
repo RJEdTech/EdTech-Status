@@ -518,7 +518,6 @@
   .dot.partial     { background: var(--alert); box-shadow: 0 0 8px var(--alert-glow); }
   .dot.major       { background: var(--crit);  box-shadow: 0 0 10px var(--crit-glow); }
   .dot.unknown     { background: var(--neutral); }
-  .dot.linkonly    { background: transparent; border: 1px solid var(--ink-mute); }
 
   /* Breakage = scraper can't read source. Slate dot with a wrench glyph. */
   .dot.breakage {
@@ -572,7 +571,32 @@
   .tile-link:hover { color: var(--red); text-decoration: none; }
   .tile-link::after { content: " →"; }
 
-  .tile.linkonly .status-text { color: var(--ink-dim); }
+  /* Link-only tiles — vendors with no machine-readable status feed available
+     (e.g., Microsoft 365, where the API requires tenant auth and the public
+     RSS blocks browser fetches). Visually distinct from live-status tiles:
+     dashed border signals "this is a doorway, not a sensor." No status dot,
+     no status text — just the name, sub, and a clear CTA to open the
+     vendor's own status page. */
+  .tile.linkonly {
+    border-style: dashed;
+    border-color: var(--border-mid);
+    background: var(--surface-2);
+  }
+  .tile.linkonly:hover {
+    border-color: var(--ink-mute);
+    background: var(--surface);
+  }
+  .tile.linkonly .tile-footer {
+    padding-top: 4px;
+  }
+  .tile.linkonly .tile-link {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .tile.linkonly .tile-link:hover {
+    color: var(--red);
+  }
 
   /* ======================================================================
      FOOTER
@@ -1846,39 +1870,37 @@ function renderTile(vendor, result) {
   topRow.appendChild(nameBlock);
   tile.appendChild(topRow);
 
-  // Status row
-  const statusRow = document.createElement('div');
-  statusRow.className = 'status-row';
-  const dot = document.createElement('span');
-  dot.className = 'dot';
-  const statusText = document.createElement('span');
-  statusText.className = 'status-text';
+  // Status row (skipped entirely for link-only tiles — no live status to show)
+  if (vendor.type !== 'linkonly') {
+    const statusRow = document.createElement('div');
+    statusRow.className = 'status-row';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    const statusText = document.createElement('span');
+    statusText.className = 'status-text';
 
-  if (vendor.type === 'linkonly') {
-    dot.classList.add('linkonly');
-    statusText.classList.add('muted');
-    statusText.textContent = 'Status page (manual check)';
-  } else if (!result) {
-    dot.classList.add('unknown');
-    statusText.classList.add('muted');
-    statusText.textContent = 'Loading…';
-  } else if (result.error) {
-    dot.classList.add('unknown');
-    statusText.classList.add('muted');
-    statusText.textContent = result.cached ? severityLabel(result.severity) + ' (cached)' : 'Could not reach status page';
-  } else {
-    dot.classList.add(result.severity);
-    // In compact mode, suppress the long status string — green tiles just
-    // get the dot. In full mode, show the actual status text.
-    if (mode === 'compact' && result.severity === 'operational') {
-      statusText.textContent = 'Working';
+    if (!result) {
+      dot.classList.add('unknown');
+      statusText.classList.add('muted');
+      statusText.textContent = 'Loading…';
+    } else if (result.error) {
+      dot.classList.add('unknown');
+      statusText.classList.add('muted');
+      statusText.textContent = result.cached ? severityLabel(result.severity) + ' (cached)' : 'Could not reach status page';
     } else {
-      statusText.textContent = result.statusText || severityLabel(result.severity);
+      dot.classList.add(result.severity);
+      // In compact mode, suppress the long status string — green tiles just
+      // get the dot. In full mode, show the actual status text.
+      if (mode === 'compact' && result.severity === 'operational') {
+        statusText.textContent = 'Working';
+      } else {
+        statusText.textContent = result.statusText || severityLabel(result.severity);
+      }
     }
+    statusRow.appendChild(dot);
+    statusRow.appendChild(statusText);
+    tile.appendChild(statusRow);
   }
-  statusRow.appendChild(dot);
-  statusRow.appendChild(statusText);
-  tile.appendChild(statusRow);
 
   // Incident detail (only rendered into the DOM in full mode — compact mode
   // hides .tile-incident via CSS, but we skip the work entirely when we know
@@ -1902,7 +1924,12 @@ function renderTile(vendor, result) {
   main.href = vendor.pageUrl;
   main.target = '_blank';
   main.rel = 'noopener';
-  main.textContent = 'Status page';
+  // Link-only tiles get a vendor-named CTA so the link itself reads as the
+  // tile's purpose ("Open Microsoft 365 status page") rather than a generic
+  // footer afterthought ("Status page").
+  main.textContent = vendor.type === 'linkonly'
+    ? 'Open ' + vendor.name + ' status page'
+    : 'Status page';
   links.appendChild(main);
   if (vendor.extraLink) {
     const sep = document.createElement('span');
