@@ -157,7 +157,7 @@
     font-family: "IBM Plex Mono", monospace;
   }
 
-  /* Section labels */
+  /* Section labels — flex layout so we can show a small note next to the title */
   .section-label {
     font-size: 11px;
     font-weight: 700;
@@ -167,17 +167,51 @@
     margin: 36px 0 14px 0;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
   }
   .section-label:first-of-type { margin-top: 0; }
-
-  /* Grid */
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 14px;
+  .section-label-note {
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    color: var(--text-mute);
+    font-style: italic;
   }
 
-  /* Tile */
+  /* Grids — three flavors driving tile density. Critical packs ~2-3 across
+     (biggest tiles), core packs ~3-4 across (medium), secondary ~4-5 across
+     (compact). */
+  .grid {
+    display: grid;
+    gap: 14px;
+  }
+  .grid-critical {
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 18px;
+  }
+  .grid-core {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  .grid-secondary {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+  }
+  /* Infrastructure tier — same compact density as secondary, but visually
+     distinguished by the section header note. Tiles themselves render with
+     a dimmer border to signal "context, not primary signal." */
+  .grid-infra {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+  }
+
+  /* Tile — base styles. Tier-specific overrides below scale typography and
+     padding so the visual hierarchy reads at a glance. */
   .tile {
     background: var(--bg-2);
     border: 1px solid var(--border);
@@ -192,6 +226,113 @@
   .tile.is-incident { border-left: 3px solid var(--red); padding-left: 18px; }
   .tile.is-degraded { border-left: 3px solid var(--yellow); padding-left: 18px; }
   .tile.is-breakage { border-left: 3px solid var(--slate); padding-left: 18px; }
+
+  /* Critical tier — biggest, most prominent. Slightly thicker incident border too. */
+  .tile.tier-critical {
+    padding: 24px 26px;
+    gap: 14px;
+  }
+  .tile.tier-critical.is-incident { border-left-width: 4px; padding-left: 25px; }
+  .tile.tier-critical.is-degraded { border-left-width: 4px; padding-left: 25px; }
+  .tile.tier-critical.is-breakage { border-left-width: 4px; padding-left: 25px; }
+  .tile.tier-critical .tile-name {
+    font-size: 19px;
+  }
+  .tile.tier-critical .tile-sub {
+    font-size: 13px;
+  }
+  .tile.tier-critical .status-text {
+    font-size: 14px;
+  }
+  .tile.tier-critical .dot {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* Core tier — medium */
+  .tile.tier-core {
+    padding: 18px 20px;
+    gap: 10px;
+  }
+  .tile.tier-core .tile-name {
+    font-size: 16px;
+  }
+  .tile.tier-core .status-text {
+    font-size: 13px;
+  }
+
+  /* Secondary tier — compact */
+  .tile.tier-secondary {
+    padding: 12px 14px;
+    gap: 6px;
+  }
+  .tile.tier-secondary .tile-name {
+    font-size: 13px;
+  }
+  .tile.tier-secondary .tile-sub {
+    font-size: 11px;
+    margin-top: 1px;
+  }
+  .tile.tier-secondary .status-text {
+    font-size: 12px;
+  }
+  .tile.tier-secondary .dot {
+    width: 8px;
+    height: 8px;
+  }
+  .tile.tier-secondary .tile-incident {
+    font-size: 11px;
+  }
+  .tile.tier-secondary .tile-footer {
+    font-size: 11px;
+  }
+
+  /* Infrastructure tier — compact like secondary, but dimmer border by default
+     to communicate "context layer, not primary alert." When these tiles DO
+     report issues, they still get the colored incident border via .is-incident
+     etc., same as any other tile. */
+  .tile.tier-infra {
+    padding: 12px 14px;
+    gap: 6px;
+    border-color: rgba(255,255,255,0.06);
+    background: rgba(26, 26, 42, 0.6);
+  }
+  .tile.tier-infra:hover { border-color: var(--border); }
+  .tile.tier-infra .tile-name {
+    font-size: 13px;
+  }
+  .tile.tier-infra .tile-sub {
+    font-size: 11px;
+    margin-top: 1px;
+  }
+  .tile.tier-infra .status-text {
+    font-size: 12px;
+  }
+  .tile.tier-infra .dot {
+    width: 8px;
+    height: 8px;
+  }
+  .tile.tier-infra .tile-incident {
+    font-size: 11px;
+  }
+  .tile.tier-infra .tile-footer {
+    font-size: 11px;
+  }
+  /* Dependents badge — appears on an infra tile when we detect that a
+     service depending on this infra is ALSO reporting issues. The badge is
+     small and muted on its own, but lights up red/orange when correlated. */
+  .tile-correlation {
+    font-size: 11px;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .tile-correlation.is-correlated {
+    color: var(--orange);
+  }
+  .tile-correlation strong { color: var(--text-strong); }
 
   .tile-row {
     display: flex;
@@ -328,15 +469,42 @@
     <div class="summary-counts" id="summaryCounts"></div>
   </div>
 
-  <div class="section-label">Live status</div>
-  <div class="grid" id="liveGrid"></div>
+  <div class="section-label">
+    <span>Critical services</span>
+    <span class="section-label-note">School-day-blocking if any are down</span>
+  </div>
+  <div class="grid grid-critical" id="criticalGrid"></div>
 
-  <div class="section-label">Status pages without live data</div>
-  <div class="grid" id="linkOnlyGrid"></div>
+  <div class="section-label">
+    <span>Core services</span>
+    <span class="section-label-note">Significant impact when down</span>
+  </div>
+  <div class="grid grid-core" id="coreGrid"></div>
+
+  <div class="section-label">
+    <span>Secondary tools</span>
+    <span class="section-label-note">Canvas integrations and side tools</span>
+  </div>
+  <div class="grid grid-secondary" id="secondaryGrid"></div>
+
+  <div class="section-label">
+    <span>Supporting infrastructure</span>
+    <span class="section-label-note">Context, not alert — issues here only matter when tools above are also affected</span>
+  </div>
+  <div class="grid grid-infra" id="infraGrid"></div>
+
+  <div class="section-label">
+    <span>Status pages without live data</span>
+    <span class="section-label-note">Manual check required</span>
+  </div>
+  <div class="grid grid-secondary" id="linkOnlyGrid"></div>
 
   <footer class="page-foot">
     <p><strong>About this dashboard.</strong> Status pages reflect what vendors choose to report and can lag actual outages by 30 minutes or more. Treat this as a first signal, not a definitive answer. If teachers report a problem and the tile is still green, the problem is real.</p>
-    <p style="margin-top: 10px;"><strong>Why some tiles are link-only.</strong> NoRedInk and DeltaMath are aggregated by StatusGator, which requires an account for API access. Click the tile to see the vendor's page.</p>
+    <p style="margin-top: 10px;"><strong>Why tools are tiered.</strong> Critical services (Microsoft sign-in, OneDrive/SharePoint, Outlook, Canvas) stop the school day if they're down. Core services (Teams, Blackbaud, Vivi, Flint) cause significant disruption but teaching can continue. Secondary tools affect individual classes at most. The summary banner weights these accordingly — a Canvas outage rings louder than a Gimkit outage even at the same severity.</p>
+    <p style="margin-top: 10px;"><strong>Microsoft 365 is split into four tiles.</strong> Each tile reads from the same M365 RSS feed but filters for items relevant to that service (Entra/sign-in, OneDrive/SharePoint, Exchange/Outlook, Teams). Other M365 services Microsoft reports on (Power BI, Yammer, etc.) are intentionally not surfaced — they don't affect teaching.</p>
+    <p style="margin-top: 10px;"><strong>Supporting infrastructure is context, not alert.</strong> AWS and Cloudflare underpin many of the tools above (Canvas, NoRedInk, Quizizz, and others). Issues at this layer don't necessarily mean anything is broken at Regis Jesuit — Cloudflare and AWS can have regional problems that never reach Aurora. These tiles exist to explain outages higher up. When a tool goes red <em>and</em> its infrastructure dependency is also red, the banner notes "possible upstream cause" so you know the root issue may not be the tool itself.</p>
+    <p style="margin-top: 10px;"><strong>Why some tiles are link-only.</strong> DeltaMath is aggregated by StatusGator, which requires an account for API access. Click the tile to see the vendor's page.</p>
     <p style="margin-top: 10px;">Built and maintained by Jason Beyer · RJEdTech</p>
   </footer>
 
@@ -346,125 +514,166 @@
 //=============================================================================
 // VENDOR CONFIG
 //=============================================================================
+// Each vendor has a `tier` field that drives both visual treatment and how the
+// summary banner weights it.
+//
+//   'critical'  = school-day-blocking. If down, teaching/operations stop or get
+//                 severely impaired. Microsoft sign-in (Entra), OneDrive/SharePoint,
+//                 Exchange/Outlook, and Canvas. M365's foundational role means
+//                 sign-in being down cascades into everything else being unreachable.
+//                 Largest tiles, banner color and wording prioritizes these hardest.
+//   'core'      = significant impact when down but won't stop the school. Teams,
+//                 Blackbaud, Vivi, Flint. Larger tiles than secondary.
+//   'secondary' = teacher integrations and side tools — important but won't
+//                 stop the school. Smaller compact tiles. Counted separately
+//                 in the summary line so a Gimkit outage doesn't read the
+//                 same as a Canvas outage.
+//   'linkonly'  = no live data available, manual check required. Bottom section.
+//
+// SPECIAL CASE — M365 services share a single source:
+// The four Microsoft tiles (entra, sharepoint, exchange, teams) all read from
+// the same m365.json snapshot file (written by .github/workflows/fetch-m365.yml,
+// which filters the M365 RSS feed by service-name keywords). Each entry has a
+// `serviceKey` field that the m365service fetcher uses to pull its specific
+// service's status from the shared snapshot.
 const VENDORS = [
-  // --- Atlassian Statuspage (api/v2/status.json) ---
+  // ============================================================
+  // CRITICAL (4) — school-day-blocking
+  // ============================================================
+  {
+    id: 'm365_entra',
+    name: 'Microsoft sign-in',
+    sub: 'Entra ID — auth foundation for everything',
+    tier: 'critical',
+    type: 'm365service',
+    serviceKey: 'entra',
+    apiUrl: 'm365.json',
+    pageUrl: 'https://status.cloud.microsoft/'
+  },
+  {
+    id: 'm365_sharepoint',
+    name: 'OneDrive / SharePoint',
+    sub: 'Where student work lives',
+    tier: 'critical',
+    type: 'm365service',
+    serviceKey: 'sharepoint',
+    apiUrl: 'm365.json',
+    pageUrl: 'https://status.cloud.microsoft/'
+  },
+  {
+    id: 'm365_exchange',
+    name: 'Exchange / Outlook',
+    sub: 'Mail and calendar',
+    tier: 'critical',
+    type: 'm365service',
+    serviceKey: 'exchange',
+    apiUrl: 'm365.json',
+    pageUrl: 'https://status.cloud.microsoft/'
+  },
   {
     id: 'instructure',
     name: 'Canvas',
     sub: 'Instructure — global status',
+    tier: 'critical',
     type: 'statuspage',
     apiUrl: 'https://status.instructure.com/api/v2/status.json',
     summaryUrl: 'https://status.instructure.com/api/v2/summary.json',
     pageUrl: 'https://status.instructure.com/',
     extraLink: { label: 'RJ instance uptime', url: 'https://statushistory.instructure.com/rjhs.instructure.com' }
   },
+
+  // ============================================================
+  // CORE (4) — significant impact but not blocking
+  // ============================================================
   {
-    id: 'flint',
-    name: 'Flint',
-    sub: 'flintk12.com',
-    type: 'statuspage',
-    apiUrl: 'https://status.flintk12.com/api/v2/status.json',
-    summaryUrl: 'https://status.flintk12.com/api/v2/summary.json',
-    pageUrl: 'https://status.flintk12.com/'
+    id: 'm365_teams',
+    name: 'Microsoft Teams',
+    sub: 'Staff comms, DECA, meetings',
+    tier: 'core',
+    type: 'm365service',
+    serviceKey: 'teams',
+    apiUrl: 'm365.json',
+    pageUrl: 'https://status.cloud.microsoft/'
   },
   {
-    id: 'respondus',
-    name: 'Respondus',
-    sub: 'LockDown Browser & Monitor',
+    // Blackbaud's status page rolls up dozens of components across many products
+    // (RE NXT, FE NXT, Luminate, YourCause, etc). The top-level indicator fires
+    // when ANY of them is degraded — fine for our purposes since we want
+    // visibility on Education Management (SIS, LMS, Enrollment, Billing, School
+    // Website), Tuition Management, the financial tools, AND the foundational
+    // Blackbaud.com / sign-in / Blackbaud ID layer that affects login.
+    // If we ever want to scope down to specific components, switch to summary.json
+    // and filter by component group ID.
+    id: 'blackbaud',
+    name: 'Blackbaud',
+    sub: 'SIS, LMS, EMS, financials, ID',
+    tier: 'core',
     type: 'statuspage',
-    apiUrl: 'https://status.respondus.com/api/v2/status.json',
-    summaryUrl: 'https://status.respondus.com/api/v2/summary.json',
-    pageUrl: 'https://status.respondus.com/'
+    apiUrl: 'https://status.blackbaud.com/api/v2/status.json',
+    summaryUrl: 'https://status.blackbaud.com/api/v2/summary.json',
+    pageUrl: 'https://status.blackbaud.com/'
   },
   {
     id: 'vivi',
     name: 'Vivi',
     sub: 'Wireless display & screen mirroring',
+    tier: 'core',
     type: 'statuspage',
     apiUrl: 'https://status.vivi.io/api/v2/status.json',
     summaryUrl: 'https://status.vivi.io/api/v2/summary.json',
     pageUrl: 'https://status.vivi.io/'
   },
   {
-    id: 'kahoot',
-    name: 'Kahoot',
-    sub: 'Game-based learning platform',
+    id: 'flint',
+    name: 'Flint',
+    sub: 'flintk12.com',
+    tier: 'core',
     type: 'statuspage',
-    apiUrl: 'https://status.kahoot.com/api/v2/status.json',
-    summaryUrl: 'https://status.kahoot.com/api/v2/summary.json',
-    pageUrl: 'https://status.kahoot.com/'
-  },
-  {
-    // Blackbaud's status page rolls up dozens of components across many products
-    // (RE NXT, FE NXT, Luminate, YourCause, etc). The top-level indicator fires
-    // when ANY of them is degraded — which is fine for our purposes since we want
-    // visibility on Education Management (SIS, LMS, Enrollment, Billing, School
-    // Website), Tuition Management, the financial tools, AND the foundational
-    // Blackbaud.com / sign-in / Blackbaud ID layer that affects login regardless.
-    // If we ever want to scope down to specific components, switch to summary.json
-    // and filter by component group ID.
-    id: 'blackbaud',
-    name: 'Blackbaud',
-    sub: 'SIS, LMS, EMS, financials, ID',
-    type: 'statuspage',
-    apiUrl: 'https://status.blackbaud.com/api/v2/status.json',
-    summaryUrl: 'https://status.blackbaud.com/api/v2/summary.json',
-    pageUrl: 'https://status.blackbaud.com/'
+    apiUrl: 'https://status.flintk12.com/api/v2/status.json',
+    summaryUrl: 'https://status.flintk12.com/api/v2/summary.json',
+    pageUrl: 'https://status.flintk12.com/'
   },
 
-  // --- Instatus (summary.json) ---
+  // ============================================================
+  // SECONDARY (9) — Canvas integrations and side tools
+  // ============================================================
+  {
+    id: 'respondus',
+    name: 'Respondus',
+    sub: 'LockDown Browser & Monitor',
+    tier: 'secondary',
+    type: 'statuspage',
+    apiUrl: 'https://status.respondus.com/api/v2/status.json',
+    summaryUrl: 'https://status.respondus.com/api/v2/summary.json',
+    pageUrl: 'https://status.respondus.com/'
+  },
   {
     id: 'copyleaks',
     name: 'Copyleaks',
     sub: 'AI detection & plagiarism',
+    tier: 'secondary',
     type: 'instatus',
     apiUrl: 'https://status.copyleaks.com/summary.json',
     pageUrl: 'https://status.copyleaks.com/'
   },
-
-  // --- Microsoft 365 (RSS proxied via GitHub Actions to m365.json at root) ---
-  {
-    id: 'm365',
-    name: 'Microsoft 365',
-    sub: 'Admin Center status',
-    type: 'm365snapshot',
-    apiUrl: 'm365.json',
-    pageUrl: 'https://status.cloud.microsoft/'
-  },
-
-  // --- ExploreLearning (status page scraped via GitHub Actions to explorelearning.json at root) ---
-  {
-    id: 'explorelearning',
-    name: 'ExploreLearning',
-    sub: 'Gizmos, Reflex, Frax',
-    type: 'elsnapshot',
-    apiUrl: 'explorelearning.json',
-    pageUrl: 'https://www.explorelearning.com/our-products/site-status'
-  },
-
-  // --- Link-only ---
-  {
-    id: 'noredink',
-    name: 'NoRedInk',
-    sub: 'Aggregated by StatusGator',
-    type: 'linkonly',
-    pageUrl: 'https://statusgator.com/services/noredink'
-  },
-  {
-    id: 'deltamath',
-    name: 'DeltaMath',
-    sub: 'Aggregated by StatusGator',
-    type: 'linkonly',
-    pageUrl: 'https://statusgator.com/services/deltamath'
-  },
   {
     id: 'aspiredu',
     name: 'AspirEDU',
-    sub: 'Grade Guardian, Dropout Detective, Instructor Insight',
+    sub: 'Grade Guardian, Dropout Detective',
+    tier: 'secondary',
     type: 'statuspage',
     apiUrl: 'https://aspiredu.statuspage.io/api/v2/status.json',
     summaryUrl: 'https://aspiredu.statuspage.io/api/v2/summary.json',
     pageUrl: 'https://aspiredu.statuspage.io/'
+  },
+  {
+    id: 'explorelearning',
+    name: 'ExploreLearning',
+    sub: 'Gizmos, Reflex, Frax',
+    tier: 'secondary',
+    type: 'elsnapshot',
+    apiUrl: 'explorelearning.json',
+    pageUrl: 'https://www.explorelearning.com/our-products/site-status'
   },
   // IXL (status.ixl.com is hosted on Uptime.com, which has no public unauthenticated
   // JSON endpoint, so we scrape the inline JS blob via GitHub Actions to ixl.json)
@@ -472,18 +681,30 @@ const VENDORS = [
     id: 'ixl',
     name: 'IXL',
     sub: 'status.ixl.com',
+    tier: 'secondary',
     type: 'ixlsnapshot',
     apiUrl: 'ixl.json',
     pageUrl: 'https://status.ixl.com/'
   },
+  {
+    id: 'kahoot',
+    name: 'Kahoot',
+    sub: 'Game-based learning',
+    tier: 'secondary',
+    type: 'statuspage',
+    apiUrl: 'https://status.kahoot.com/api/v2/status.json',
+    summaryUrl: 'https://status.kahoot.com/api/v2/summary.json',
+    pageUrl: 'https://status.kahoot.com/'
+  },
   // Quizizz / Wayground (status page hosted on Freshping, no public unauthenticated
-  // JSON endpoint, so we scrape the rendered banner via GitHub Actions to quizizz.json)
+  // JSON endpoint, so we scrape the rendered banner via GitHub Actions to quizizz.json).
   // Note: Quizizz has been rebranded to "Wayground" but everyone still calls it Quizizz,
   // so we label it Quizizz with a sub-line noting the rebrand.
   {
     id: 'quizizz',
     name: 'Quizizz',
     sub: 'Now branded "Wayground"',
+    tier: 'secondary',
     type: 'quizizzsnapshot',
     apiUrl: 'quizizz.json',
     pageUrl: 'https://statuspage.freshping.io/621-QuizizzStatusPage/'
@@ -494,6 +715,7 @@ const VENDORS = [
     id: 'gimkit',
     name: 'Gimkit',
     sub: 'Game-based learning & 2D modes',
+    tier: 'secondary',
     type: 'gimkitsnapshot',
     apiUrl: 'gimkit.json',
     pageUrl: 'https://gimkit.crisp.watch/en/'
@@ -504,11 +726,99 @@ const VENDORS = [
     id: 'soundtrap',
     name: 'Soundtrap',
     sub: 'Music creation & podcasting',
+    tier: 'secondary',
     type: 'soundtrapsnapshot',
     apiUrl: 'soundtrap.json',
     pageUrl: 'https://status.soundtrap.com/'
+  },
+  // NoRedInk (status page hosted on Status.io, scraped to noredink.json by
+  // GitHub Actions. Replaces the previous StatusGator link-only tile now that
+  // we have live parsing of the vendor's own status page.)
+  {
+    id: 'noredink',
+    name: 'NoRedInk',
+    sub: 'Grammar & writing practice',
+    tier: 'secondary',
+    type: 'noredinksnapshot',
+    apiUrl: 'noredink.json',
+    pageUrl: 'https://noredinkstatus.com/'
+  },
+
+  // ============================================================
+  // INFRASTRUCTURE (2) — platforms our tools depend on
+  // ============================================================
+  // Context layer, not primary signal. These tiles exist to explain outages
+  // higher up the stack: when Canvas goes red AND Cloudflare also goes red,
+  // the banner adds a "possible upstream cause" note so IT and teachers know
+  // the root problem may not be Canvas itself. Dependency map lives below in
+  // INFRA_DEPENDENCIES. Issues at this layer do NOT escalate the banner on
+  // their own — a Cloudflare regional outage that doesn't touch Aurora
+  // shouldn't sound an alarm here.
+  //
+  // AWS exposes a combined RSS feed at /rss/all.rss covering every service
+  // and region. We don't filter by service (AWS has hundreds of service/region
+  // combos we don't use); if anything's broken at AWS, we surface it and let
+  // the human decide if it matters. False positive is cheap — the tile exists
+  // as context.
+  {
+    id: 'aws',
+    name: 'AWS',
+    sub: 'Amazon Web Services — hosts Canvas, NoRedInk, Quizizz, more',
+    tier: 'infra',
+    type: 'awssnapshot',
+    apiUrl: 'aws.json',
+    pageUrl: 'https://health.aws.amazon.com/health/status'
+  },
+  // Cloudflare uses Atlassian Statuspage v2 with a public CORS-enabled API,
+  // so we fetch it directly in the browser — no GitHub Action needed. Reuses
+  // the same fetchStatuspage() code path as Canvas, Blackbaud, etc.
+  {
+    id: 'cloudflare',
+    name: 'Cloudflare',
+    sub: 'Fronts many of our vendor sites',
+    tier: 'infra',
+    type: 'statuspage',
+    apiUrl: 'https://www.cloudflarestatus.com/api/v2/status.json',
+    summaryUrl: 'https://www.cloudflarestatus.com/api/v2/summary.json',
+    pageUrl: 'https://www.cloudflarestatus.com/'
+  },
+
+  // ============================================================
+  // LINK-ONLY (no live data, manual check)
+  // ============================================================
+  {
+    id: 'deltamath',
+    name: 'DeltaMath',
+    sub: 'Aggregated by StatusGator',
+    tier: 'linkonly',
+    type: 'linkonly',
+    pageUrl: 'https://statusgator.com/services/deltamath'
   }
 ];
+
+//=============================================================================
+// INFRASTRUCTURE DEPENDENCY MAP
+//=============================================================================
+// Which infrastructure providers each service depends on. Used for correlation:
+// when a service tile is red AND one of its listed infra dependencies is also
+// red, the banner notes "possible upstream cause" to hint that the root issue
+// may not be the service itself.
+//
+// CURATED, not exhaustive. Only list dependencies you've confirmed publicly
+// (vendor status page "external services" section, published docs, etc.).
+// A missing entry is safer than a wrong one — dashboards that claim
+// dependencies they can't back up lose trust fast. NoRedInk's own status
+// page explicitly lists AWS and Cloudflare as external services. Canvas
+// (Instructure) has historically run on AWS with Cloudflare fronting much
+// of its traffic; Quizizz's infrastructure is also AWS-hosted.
+//
+// Keys are vendor ids (from VENDORS above). Values are arrays of infra
+// vendor ids the service depends on.
+const INFRA_DEPENDENCIES = {
+  instructure: ['aws', 'cloudflare'],
+  noredink: ['aws', 'cloudflare'],
+  quizizz: ['aws', 'cloudflare'],
+};
 
 //=============================================================================
 // STATE
@@ -707,20 +1017,53 @@ function mapInstatusImpact(impact) {
   }
 }
 
-// Microsoft 365 snapshot file:
+// Microsoft 365 per-service snapshot file:
 //   Written by the .github/workflows/fetch-m365.yml workflow every 5 minutes.
 //   Same-origin fetch, so no CORS issues.
-//   Status field comes from the RSS feed's <status> element on the first item.
-//   "Available" = operational; anything else = at least partial outage.
-async function fetchM365(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
+//   The workflow filters the M365 RSS feed by service-name keywords and writes
+//   per-service status under data.services[serviceKey]. Each M365 vendor entry
+//   in the dashboard config has a `serviceKey` field naming which service
+//   bucket it pulls from ('entra', 'sharepoint', 'exchange', 'teams').
+//
+// Per-refresh caching:
+//   All four M365 tiles share the same JSON file. Without caching, a single
+//   refreshAll() would fetch m365.json four times. The cache holds the parsed
+//   JSON for the duration of a single refreshAll() call (cleared at the start
+//   of each refresh by clearM365Cache()) so we fetch once per cycle.
+let m365SnapshotCache = null;
+let m365SnapshotCachePromise = null;
 
+function clearM365Cache() {
+  m365SnapshotCache = null;
+  m365SnapshotCachePromise = null;
+}
+
+async function loadM365Snapshot(apiUrl) {
+  if (m365SnapshotCache) return m365SnapshotCache;
+  // If a fetch is already in flight (parallel tile fetches), reuse its promise
+  // rather than racing duplicate requests.
+  if (m365SnapshotCachePromise) return m365SnapshotCachePromise;
+
+  m365SnapshotCachePromise = (async () => {
+    const res = await fetch(apiUrl, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    m365SnapshotCache = data;
+    return data;
+  })();
+  return m365SnapshotCachePromise;
+}
+
+async function fetchM365Service(vendor) {
+  const data = await loadM365Snapshot(vendor.apiUrl);
+
+  // If the workflow itself failed (couldn't fetch or parse the RSS feed), every
+  // M365 tile shows breakage with that service's last-known severity.
   if (data.parseError) {
+    const svcLastKnown = data.services && data.services[vendor.serviceKey];
     return buildBreakageResult({
       vendorPageLabel: 'Microsoft 365 status page',
-      lastKnownSeverity: data.status && data.status.toLowerCase() === 'available' ? 'operational' : 'partial',
+      lastKnownSeverity: svcLastKnown ? svcLastKnown.severity : null,
       lastSuccessfulParse: data.lastSuccessfulParse,
       firstFailedAt: data.parseError.firstFailedAt,
       errorMessage: data.parseError.message,
@@ -728,31 +1071,76 @@ async function fetchM365(vendor) {
     });
   }
 
-  const status = (data.status || '').trim();
-  const isAvailable = status.toLowerCase() === 'available';
-
-  let severity = 'operational';
-  let statusText = 'All services available';
-  let incident = null;
-
-  if (status && !isAvailable) {
-    severity = 'partial';
-    statusText = status;
-    incident = {
-      name: data.title || 'Service issue reported',
-      status: status,
-      updatedAt: data.pubDate ? new Date(data.pubDate).toISOString() : null
-    };
+  // Pull this tile's specific service entry from the shared snapshot. If the
+  // entry is missing (workflow ran but somehow didn't emit our serviceKey),
+  // surface as breakage rather than silently defaulting to operational —
+  // a green tile we can't trust is worse than an honest "check this."
+  const svc = data.services && data.services[vendor.serviceKey];
+  if (!svc) {
+    return buildBreakageResult({
+      vendorPageLabel: 'Microsoft 365 status page',
+      lastKnownSeverity: null,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: null,
+      errorMessage: 'Service "' + vendor.serviceKey + '" missing from snapshot — workflow may have a config drift',
+      updatedAt: data.fetchedAt
+    });
   }
 
-  // Use the snapshot's own fetchedAt as our "updated" indicator so the user
-  // can see how fresh the underlying data is, not just when the dashboard pulled it.
+  const severity = svc.severity || 'operational';
+  let statusText;
+  let incident = null;
+
+  switch (severity) {
+    case 'operational':
+      statusText = 'Available';
+      break;
+    case 'degraded':
+      statusText = svc.status || 'Advisory';
+      incident = {
+        name: svc.title || 'Microsoft is reporting an advisory',
+        status: svc.status || 'Advisory',
+        updatedAt: svc.pubDate ? safeParseDate(svc.pubDate) : null
+      };
+      break;
+    case 'partial':
+      statusText = svc.status || 'Service degradation';
+      incident = {
+        name: svc.title || 'Microsoft is reporting a service issue',
+        status: svc.status || 'Service degradation',
+        updatedAt: svc.pubDate ? safeParseDate(svc.pubDate) : null
+      };
+      break;
+    case 'major':
+      statusText = svc.status || 'Service interruption';
+      incident = {
+        name: svc.title || 'Microsoft is reporting a service interruption',
+        status: svc.status || 'Service interruption',
+        updatedAt: svc.pubDate ? safeParseDate(svc.pubDate) : null
+      };
+      break;
+    default:
+      statusText = 'Status unknown — see vendor page';
+  }
+
   return {
     severity,
     statusText,
     incident,
     updatedAt: data.fetchedAt || new Date().toISOString()
   };
+}
+
+// Defensive date parser for Microsoft pubDate. RSS pubDate is usually RFC-822
+// ("Wed, 22 Apr 2026 18:26:00 Z") but we don't want a malformed date to crash
+// the tile render, so wrap it.
+function safeParseDate(dateStr) {
+  try {
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  } catch (_) {
+    return null;
+  }
 }
 
 // ExploreLearning snapshot file:
@@ -890,7 +1278,6 @@ async function fetchIXL(vendor) {
 //   Quizizz's status page is hosted on Freshping, which has no public unauthenticated
 //   JSON endpoint. The workflow scrapes the rendered banner and maps to one of:
 //     'operational' | 'partial' | 'major' | 'maintenance'
-//   The workflow does the severity mapping itself; this function just renders.
 async function fetchQuizizz(vendor) {
   const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -959,9 +1346,10 @@ async function fetchQuizizz(vendor) {
 // Gimkit snapshot file:
 //   Written by the .github/workflows/fetch-gimkit.yml workflow every 5 minutes.
 //   Same-origin fetch, so no CORS issues.
-//   Gimkit's status page is hosted on Crisp Status, which has no public
-//   unauthenticated JSON endpoint. The workflow scrapes the rendered banner and
-//   maps Crisp's healthy/sick/dead replica states to one of:
+//   Gimkit's status page is hosted on Crisp Status (a SaaS version of the
+//   open-source Vigil tool). Crisp's REST API is for managing pages from the
+//   operator side, not for reading public status. The workflow scrapes the
+//   rendered banner and maps Crisp's healthy/sick/dead replica states to one of:
 //     'operational' | 'degraded' | 'partial' | 'major'
 async function fetchGimkit(vendor) {
   const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
@@ -1077,6 +1465,174 @@ async function fetchSoundtrap(vendor) {
   };
 }
 
+// NoRedInk snapshot file:
+//   Written by the .github/workflows/fetch-noredink.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//   NoRedInk's status page is hosted on Status.io, which has no public
+//   unauthenticated JSON endpoint for customer pages. The workflow extracts
+//   the banner text from id="statusbar_text" and maps to one of:
+//     'operational' | 'degraded' | 'partial' | 'major' | 'maintenance' | 'check_page'
+//   'check_page' means the banner was present but the wording didn't match any
+//   known state — the raw banner text is captured in data.banner for debugging.
+async function fetchNoRedInk(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'NoRedInk status page',
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  // Map workflow severity to dashboard severity. Maintenance renders as
+  // 'degraded' (yellow) per existing convention (see mapStatuspageIndicator).
+  const rawSeverity = data.severity || 'operational';
+  const severity = rawSeverity === 'maintenance' ? 'degraded'
+                 : rawSeverity === 'check_page' ? 'partial'
+                 : rawSeverity;
+
+  let statusText;
+  let incident = null;
+
+  switch (severity) {
+    case 'operational':
+      statusText = 'All systems operational';
+      break;
+    case 'degraded':
+      // If the workflow told us it was maintenance, prefer that phrasing
+      if (rawSeverity === 'maintenance') {
+        statusText = 'Scheduled maintenance';
+        incident = {
+          name: data.banner || 'NoRedInk is in scheduled maintenance',
+          status: 'See vendor status page',
+          updatedAt: null
+        };
+      } else {
+        statusText = 'Degraded performance';
+        incident = {
+          name: data.banner || 'NoRedInk is reporting degraded performance',
+          status: 'See vendor status page',
+          updatedAt: null
+        };
+      }
+      break;
+    case 'partial':
+      // check_page lands here — banner was present but unrecognized wording
+      statusText = rawSeverity === 'check_page'
+        ? 'Unknown status — see vendor page'
+        : 'Partial outage reported';
+      incident = {
+        name: data.banner || 'NoRedInk is reporting an issue',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    case 'major':
+      statusText = 'Major outage reported';
+      incident = {
+        name: data.banner || 'Critical issue affecting NoRedInk',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    default:
+      statusText = 'Status unknown — see vendor page';
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
+// AWS snapshot file:
+//   Written by the .github/workflows/fetch-aws.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//   AWS exposes a combined RSS feed at status.aws.amazon.com/rss/all.rss.
+//   The workflow filters to active (unresolved) incidents within the last 4
+//   hours and aggregates worst-case severity across them.
+//
+// Note: we don't filter by service. AWS has hundreds of service/region
+// combinations we don't use; a US East outage of a service NoRedInk/Canvas
+// doesn't touch is technically a false positive. We accept that because
+// infrastructure tiles are context, not alerts — they only influence the
+// banner when a *dependent service* is also red (see correlation logic in
+// renderSummary).
+async function fetchAWS(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'AWS Health Dashboard',
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  const severity = data.severity || 'operational';
+  const activeCount = data.activeCount || 0;
+  let statusText;
+  let incident = null;
+
+  switch (severity) {
+    case 'operational':
+      statusText = 'All AWS services operating normally';
+      break;
+    case 'degraded':
+      statusText = activeCount === 1
+        ? '1 informational advisory'
+        : activeCount + ' informational advisories';
+      incident = {
+        name: data.firstIncidentTitle || 'AWS informational advisory',
+        status: 'See AWS Health Dashboard',
+        updatedAt: null
+      };
+      break;
+    case 'partial':
+      statusText = activeCount === 1
+        ? '1 service reporting issues'
+        : activeCount + ' services reporting issues';
+      incident = {
+        name: data.firstIncidentTitle || 'AWS is reporting an issue',
+        status: 'See AWS Health Dashboard',
+        updatedAt: null
+      };
+      break;
+    case 'major':
+      statusText = activeCount === 1
+        ? '1 service disruption'
+        : activeCount + ' service disruptions';
+      incident = {
+        name: data.firstIncidentTitle || 'AWS is reporting a service disruption',
+        status: 'See AWS Health Dashboard',
+        updatedAt: null
+      };
+      break;
+    default:
+      statusText = 'Status unknown — see AWS Health Dashboard';
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
 //=============================================================================
 // CACHING
 //=============================================================================
@@ -1149,6 +1705,11 @@ function formatClockTime(date) {
 function renderTile(vendor, result) {
   const tile = document.createElement('div');
   tile.className = 'tile';
+
+  // Tier class drives compact-vs-prominent sizing (see CSS .tier-critical / .tier-core / .tier-secondary)
+  if (vendor.tier) {
+    tile.classList.add('tier-' + vendor.tier);
+  }
 
   if (vendor.type === 'linkonly') {
     tile.classList.add('linkonly');
@@ -1261,45 +1822,220 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
-function renderSummary(results) {
-  const live = VENDORS.filter(v => v.type !== 'linkonly');
-  const liveResults = live.map(v => results[v.id]).filter(Boolean);
+// Detect correlation between a red service tile and a red infrastructure
+// tile it depends on. Returns a list of { serviceId, serviceName, infraIds }
+// for rendering in the banner tail clause and on individual infra tiles.
+//
+// Only flags a correlation when BOTH the service AND its dep are reporting
+// real issues (degraded/partial/major — not breakage, not unknown). The goal
+// is to answer "is this tool broken because of its infrastructure?" — so both
+// sides of the pair need to be reporting real, vendor-confirmed problems.
+function detectUpstreamCorrelations(results) {
+  const isRed = (r) => r && !r.error && ['degraded','partial','major'].includes(r.severity);
+  const correlations = [];
 
-  const operational = liveResults.filter(r => r.severity === 'operational' && !r.error).length;
-  const issues = liveResults.filter(r => ['degraded','partial','major'].includes(r.severity) && !r.error).length;
-  const broken = liveResults.filter(r => r.severity === 'breakage').length;
-  // "Unknown" = network failure or genuinely unknown, but excluding breakage
-  // (which we count separately so the summary isn't double-counting).
-  const unknown = liveResults.filter(r => (r.severity === 'unknown' || r.error) && r.severity !== 'breakage').length;
+  for (const [serviceId, infraIds] of Object.entries(INFRA_DEPENDENCIES)) {
+    const serviceResult = results[serviceId];
+    if (!isRed(serviceResult)) continue;
+
+    const redInfra = infraIds.filter(infraId => isRed(results[infraId]));
+    if (redInfra.length > 0) {
+      const vendor = VENDORS.find(v => v.id === serviceId);
+      correlations.push({
+        serviceId,
+        serviceName: vendor ? vendor.name : serviceId,
+        infraIds: redInfra,
+        infraNames: redInfra.map(id => {
+          const v = VENDORS.find(vv => vv.id === id);
+          return v ? v.name : id;
+        })
+      });
+    }
+  }
+  return correlations;
+}
+
+function renderSummary(results) {
+  // Split live vendors by tier so the banner can weight critical hardest, then
+  // core, then secondary. Microsoft sign-in down should ring louder than
+  // Blackbaud down should ring louder than Gimkit down — even though all three
+  // would technically register the same severity from their respective
+  // vendor status pages.
+  //
+  // Infrastructure (AWS, Cloudflare) is its own category. Infrastructure issues
+  // don't ESCALATE the banner on their own — a Cloudflare regional problem
+  // that doesn't touch Aurora shouldn't sound an alarm. But when a dependent
+  // service is red and infra is ALSO red, the banner adds a "possible upstream
+  // cause" tail clause (see correlations below).
+  const criticalVendors = VENDORS.filter(v => v.tier === 'critical');
+  const coreVendors = VENDORS.filter(v => v.tier === 'core');
+  const secondaryVendors = VENDORS.filter(v => v.tier === 'secondary');
+  const infraVendors = VENDORS.filter(v => v.tier === 'infra');
+
+  const criticalResults = criticalVendors.map(v => results[v.id]).filter(Boolean);
+  const coreResults = coreVendors.map(v => results[v.id]).filter(Boolean);
+  const secondaryResults = secondaryVendors.map(v => results[v.id]).filter(Boolean);
+  const infraResults = infraVendors.map(v => results[v.id]).filter(Boolean);
+  const allLiveResults = [...criticalResults, ...coreResults, ...secondaryResults, ...infraResults];
+
+  // Worst-actual-severity per tier (excludes breakage and errors — those are
+  // counted separately because they're meta-problems with the dashboard, not
+  // vendor-confirmed outages).
+  const worstSeverity = (resultsList) => {
+    let worst = 'operational';
+    for (const r of resultsList) {
+      if (r.error || r.severity === 'breakage') continue;
+      if (severityRank(r.severity) > severityRank(worst)) worst = r.severity;
+    }
+    return worst;
+  };
+
+  const criticalWorst = worstSeverity(criticalResults);
+  const coreWorst = worstSeverity(coreResults);
+  const secondaryWorst = worstSeverity(secondaryResults);
+
+  const hasIssue = (r) => ['degraded','partial','major'].includes(r.severity) && !r.error;
+  const criticalIssues = criticalResults.filter(hasIssue).length;
+  const coreIssues = coreResults.filter(hasIssue).length;
+  const secondaryIssues = secondaryResults.filter(hasIssue).length;
+  const infraIssues = infraResults.filter(hasIssue).length;
+  const broken = allLiveResults.filter(r => r.severity === 'breakage').length;
+  const operational = allLiveResults.filter(r => r.severity === 'operational' && !r.error).length;
+  const unknown = allLiveResults.filter(r => (r.severity === 'unknown' || r.error) && r.severity !== 'breakage').length;
+
+  // Upstream correlation: any tool + its infra both red? These drive a
+  // "possible upstream cause" tail clause in the banner.
+  const correlations = detectUpstreamCorrelations(results);
 
   const dot = document.getElementById('summaryDot');
   const text = document.getElementById('summaryText');
   const counts = document.getElementById('summaryCounts');
 
-  // Pick the worst severity across all live vendors for the summary
-  let worst = 'operational';
-  for (const r of liveResults) {
-    if (r.error || r.severity === 'breakage') continue;
-    if (severityRank(r.severity) > severityRank(worst)) worst = r.severity;
-  }
+  // Helper: severity → color var. Used to drive the banner dot color from
+  // whichever tier's worst severity wins priority.
+  const sevColor = (sev) => {
+    if (sev === 'major')    return { bg: 'var(--red)',    glow: 'rgba(193,20,48,0.5)' };
+    if (sev === 'partial')  return { bg: 'var(--orange)', glow: 'rgba(251,146,60,0.4)' };
+    if (sev === 'degraded') return { bg: 'var(--yellow)', glow: 'rgba(250,204,21,0.4)' };
+    return null;
+  };
 
-  // Banner priority: real outages first (vendor-confirmed), then breakage,
-  // then all-clear. This matters because a real outage is more actionable
-  // than a broken scraper, even if the broken scraper is more alarming-looking.
-  if (issues > 0) {
-    dot.style.background = worst === 'major' ? 'var(--red)' : worst === 'partial' ? 'var(--orange)' : 'var(--yellow)';
-    dot.style.boxShadow = '0 0 12px ' + dot.style.background;
-    let msg = issues + ' tool' + (issues === 1 ? '' : 's') + ' reporting issues';
+  // Helper: list affected vendor names from a tier (iterates vendors directly
+  // rather than results→vendor lookup, because two vendors can hold === references
+  // to the same result object during cache fallback).
+  const affectedNames = (vendorList) =>
+    vendorList.filter(v => results[v.id] && hasIssue(results[v.id])).map(v => v.name);
+
+  // Build the correlation tail clause once — reused across critical/core/secondary
+  // branches. Phrasing is deliberately hedged ("possible upstream cause") because
+  // we're observing correlation, not diagnosing causation.
+  const correlationTail = () => {
+    if (correlations.length === 0) return null;
+    // Aggregate: which infra providers were implicated across all correlations?
+    const implicatedInfra = new Set();
+    correlations.forEach(c => c.infraNames.forEach(n => implicatedInfra.add(n)));
+    const infraList = [...implicatedInfra];
+    const infraPhrase = infraList.length === 1
+      ? infraList[0] + ' also reporting issues'
+      : infraList.join(' and ') + ' also reporting issues';
+    return infraPhrase + ' — possible upstream cause';
+  };
+
+  // Banner priority order (high to low):
+  //   1. CRITICAL issue → name the affected critical service(s); mention
+  //      core + secondary tails if any; correlation tail if applicable
+  //   2. CORE issue → name the affected core service(s); mention secondary
+  //      if any; explicitly note critical tier is OK; correlation tail
+  //   3. SECONDARY-only issue → "N secondary tool(s) reporting issues" with
+  //      explicit "critical and core services operational" reassurance;
+  //      correlation tail
+  //   4. INFRASTRUCTURE-only issue (nothing dependent is red) → informational
+  //      yellow banner: "Cloudflare reporting issues · no affected tools detected"
+  //   5. BREAKAGE only → meta-problem, slate banner
+  //   6. ALL CLEAR → green
+  //   7. Mixed unknown → gray
+  if (criticalIssues > 0) {
+    // CRITICAL has problems — these get top priority. Use the critical tier's
+    // own worst severity for the dot color, and lead the message with the
+    // actual service names so the reader knows immediately what's broken.
+    const c = sevColor(criticalWorst);
+    dot.style.background = c.bg;
+    dot.style.boxShadow = '0 0 12px ' + c.glow;
+
+    const names = affectedNames(criticalVendors);
+    let msg;
+    if (names.length === 1) {
+      msg = names[0] + ' down';
+    } else if (names.length === 2) {
+      msg = names.join(' and ') + ' down';
+    } else {
+      msg = criticalIssues + ' critical services down';
+    }
+
+    // Tail clauses for additional impact context
+    const tails = [];
+    if (coreIssues > 0) tails.push(coreIssues + ' core service' + (coreIssues === 1 ? '' : 's') + ' also affected');
+    if (secondaryIssues > 0) tails.push(secondaryIssues + ' secondary tool' + (secondaryIssues === 1 ? '' : 's') + ' also affected');
+    const corrTail = correlationTail();
+    if (corrTail) tails.push(corrTail);
+    if (broken > 0) tails.push(broken + ' status check' + (broken === 1 ? '' : 's') + ' broken');
+    if (tails.length > 0) msg += ' · ' + tails.join(' · ');
+
+    text.textContent = msg;
+  } else if (coreIssues > 0) {
+    // CORE has problems but critical is clean. Banner reflects core severity.
+    const c = sevColor(coreWorst);
+    dot.style.background = c.bg;
+    dot.style.boxShadow = '0 0 12px ' + c.glow;
+
+    const names = affectedNames(coreVendors);
+    let msg;
+    if (names.length === 1) {
+      msg = names[0] + ' reporting issues';
+    } else if (names.length === 2) {
+      msg = names.join(' and ') + ' reporting issues';
+    } else {
+      msg = coreIssues + ' core services reporting issues';
+    }
+    msg += ' · critical services operational';
+
+    if (secondaryIssues > 0) msg += ' · ' + secondaryIssues + ' secondary tool' + (secondaryIssues === 1 ? '' : 's') + ' also affected';
+    const corrTail = correlationTail();
+    if (corrTail) msg += ' · ' + corrTail;
+    if (broken > 0) msg += ' · ' + broken + ' status check' + (broken === 1 ? '' : 's') + ' broken';
+
+    text.textContent = msg;
+  } else if (secondaryIssues > 0) {
+    // Only SECONDARY tools — banner color reflects secondary severity but text
+    // explicitly reassures that critical and core are OK.
+    const c = sevColor(secondaryWorst);
+    dot.style.background = c.bg;
+    dot.style.boxShadow = '0 0 12px ' + c.glow;
+    let msg = secondaryIssues + ' secondary tool' + (secondaryIssues === 1 ? '' : 's') + ' reporting issues · critical and core services operational';
+    const corrTail = correlationTail();
+    if (corrTail) msg += ' · ' + corrTail;
+    if (broken > 0) msg += ' · ' + broken + ' status check' + (broken === 1 ? '' : 's') + ' broken';
+    text.textContent = msg;
+  } else if (infraIssues > 0) {
+    // No tools are red but at least one infrastructure tile is. This is the
+    // "Cloudflare has a regional issue that isn't affecting anything we can
+    // see" case. Informational yellow banner, not alarm — explicitly noting
+    // that no dependent tools are affected.
+    dot.style.background = 'var(--yellow)';
+    dot.style.boxShadow = '0 0 12px rgba(250,204,21,0.4)';
+    const infraNames = infraVendors.filter(v => results[v.id] && hasIssue(results[v.id])).map(v => v.name);
+    const phrase = infraNames.length === 1
+      ? infraNames[0] + ' reporting issues'
+      : infraNames.join(' and ') + ' reporting issues';
+    let msg = phrase + ' · no affected tools detected · all tools operational';
     if (broken > 0) msg += ' · ' + broken + ' status check' + (broken === 1 ? '' : 's') + ' broken';
     text.textContent = msg;
   } else if (broken > 0) {
-    // No real outages, but at least one scraper is broken. Use slate so the
-    // banner reads as a meta-problem (the dashboard, not a vendor) and pair
-    // with explicit text so it can't be mistaken for an outage.
+    // No real outages but at least one scraper is broken.
     dot.style.background = 'var(--slate)';
     dot.style.boxShadow = '0 0 12px rgba(100,116,139,0.4)';
     text.textContent = broken + ' status check' + (broken === 1 ? '' : 's') + ' broken — verify those tools manually';
-  } else if (operational === live.length) {
+  } else if (operational === allLiveResults.length && allLiveResults.length > 0) {
     dot.style.background = 'var(--green)';
     dot.style.boxShadow = '0 0 12px rgba(74,222,128,0.4)';
     text.textContent = 'All monitored tools operational';
@@ -1309,36 +2045,137 @@ function renderSummary(results) {
     text.textContent = 'Status partially available';
   }
 
-  let countsLine = operational + ' operational · ' + issues + ' issue' + (issues === 1 ? '' : 's');
+  // Counts line: tier-by-tier breakdown so the reader can see health at each
+  // level at a glance. Infrastructure appears after secondary.
+  const criticalOk = criticalResults.filter(r => r.severity === 'operational' && !r.error).length;
+  const coreOk = coreResults.filter(r => r.severity === 'operational' && !r.error).length;
+  const secondaryOk = secondaryResults.filter(r => r.severity === 'operational' && !r.error).length;
+  const infraOk = infraResults.filter(r => r.severity === 'operational' && !r.error).length;
+  const linkOnly = VENDORS.filter(v => v.tier === 'linkonly').length;
+
+  let countsLine = 'Critical: ' + criticalOk + '/' + criticalVendors.length + ' ok';
+  if (criticalIssues > 0) countsLine += ' (' + criticalIssues + ' issue' + (criticalIssues === 1 ? '' : 's') + ')';
+  countsLine += ' · Core: ' + coreOk + '/' + coreVendors.length + ' ok';
+  if (coreIssues > 0) countsLine += ' (' + coreIssues + ' issue' + (coreIssues === 1 ? '' : 's') + ')';
+  countsLine += ' · Secondary: ' + secondaryOk + '/' + secondaryVendors.length + ' ok';
+  if (secondaryIssues > 0) countsLine += ' (' + secondaryIssues + ' issue' + (secondaryIssues === 1 ? '' : 's') + ')';
+  countsLine += ' · Infra: ' + infraOk + '/' + infraVendors.length + ' ok';
+  if (infraIssues > 0) countsLine += ' (' + infraIssues + ' issue' + (infraIssues === 1 ? '' : 's') + ')';
   if (broken > 0) countsLine += ' · ' + broken + ' broken';
   if (unknown > 0) countsLine += ' · ' + unknown + ' unknown';
-  countsLine += ' · ' + (VENDORS.length - live.length) + ' link-only';
+  countsLine += ' · ' + linkOnly + ' link-only';
   counts.textContent = countsLine;
+
+  // Stash correlations for renderAll to use when decorating infra tiles
+  window.__currentCorrelations = correlations;
 }
 
 function renderAll(results) {
-  const liveGrid = document.getElementById('liveGrid');
+  const criticalGrid = document.getElementById('criticalGrid');
+  const coreGrid = document.getElementById('coreGrid');
+  const secondaryGrid = document.getElementById('secondaryGrid');
+  const infraGrid = document.getElementById('infraGrid');
   const linkGrid = document.getElementById('linkOnlyGrid');
-  liveGrid.innerHTML = '';
+  criticalGrid.innerHTML = '';
+  coreGrid.innerHTML = '';
+  secondaryGrid.innerHTML = '';
+  infraGrid.innerHTML = '';
   linkGrid.innerHTML = '';
 
-  // Sort live tiles: incidents first (worst on top), then operational, then unknown
-  const liveVendors = VENDORS.filter(v => v.type !== 'linkonly');
-  liveVendors.sort((a, b) => {
+  // Sort within each tier: incidents first (worst on top), then operational,
+  // then unknown. Same logic per-tier as before tiers existed; we just apply
+  // it three times so tiers stay visually grouped.
+  const sortByIncident = (a, b) => {
     const ra = results[a.id] ? severityRank(results[a.id].severity) : -1;
     const rb = results[b.id] ? severityRank(results[b.id].severity) : -1;
     if (ra !== rb) return rb - ra;
     return a.name.localeCompare(b.name);
-  });
+  };
 
-  for (const v of liveVendors) {
-    liveGrid.appendChild(renderTile(v, results[v.id]));
+  const criticalVendors = VENDORS.filter(v => v.tier === 'critical').sort(sortByIncident);
+  const coreVendors = VENDORS.filter(v => v.tier === 'core').sort(sortByIncident);
+  const secondaryVendors = VENDORS.filter(v => v.tier === 'secondary').sort(sortByIncident);
+  const infraVendors = VENDORS.filter(v => v.tier === 'infra').sort(sortByIncident);
+  const linkOnlyVendors = VENDORS.filter(v => v.tier === 'linkonly');
+
+  for (const v of criticalVendors) {
+    criticalGrid.appendChild(renderTile(v, results[v.id]));
   }
-  for (const v of VENDORS.filter(v => v.type === 'linkonly')) {
+  for (const v of coreVendors) {
+    coreGrid.appendChild(renderTile(v, results[v.id]));
+  }
+  for (const v of secondaryVendors) {
+    secondaryGrid.appendChild(renderTile(v, results[v.id]));
+  }
+
+  // Render summary first so window.__currentCorrelations is populated for
+  // infra tile decoration below.
+  renderSummary(results);
+
+  // Infra tiles get an extra correlation line showing which of our monitored
+  // tools depend on this infra provider, and whether any of those dependents
+  // are currently reporting issues (which is the "possible upstream cause"
+  // signal). This gets added AFTER renderSummary because we need the list
+  // of current correlations to know what to highlight.
+  const correlations = window.__currentCorrelations || [];
+  for (const v of infraVendors) {
+    const tile = renderTile(v, results[v.id]);
+    decorateInfraTile(tile, v, results, correlations);
+    infraGrid.appendChild(tile);
+  }
+
+  for (const v of linkOnlyVendors) {
     linkGrid.appendChild(renderTile(v, null));
   }
+}
 
-  renderSummary(results);
+// Add a small line to an infra tile listing which monitored tools depend on
+// this infra provider, and whether any of those dependents are currently red.
+// This is the visual counterpart to the correlation banner tail clause —
+// teachers/IT looking at the Cloudflare tile can see "Canvas, NoRedInk,
+// Quizizz depend on this; Canvas is also red right now."
+function decorateInfraTile(tileElement, infraVendor, results, correlations) {
+  // Which service vendors list this infra as a dependency?
+  const dependentIds = Object.entries(INFRA_DEPENDENCIES)
+    .filter(([_, infraIds]) => infraIds.includes(infraVendor.id))
+    .map(([serviceId]) => serviceId);
+
+  if (dependentIds.length === 0) return;
+
+  // Which of those dependents are CURRENTLY red? (drives correlation state)
+  const isRed = (r) => r && !r.error && ['degraded','partial','major'].includes(r.severity);
+  const redDependents = dependentIds.filter(id => isRed(results[id]));
+
+  const dependentNames = dependentIds.map(id => {
+    const v = VENDORS.find(vv => vv.id === id);
+    return v ? v.name : id;
+  });
+  const redDependentNames = redDependents.map(id => {
+    const v = VENDORS.find(vv => vv.id === id);
+    return v ? v.name : id;
+  });
+
+  const line = document.createElement('div');
+  line.className = 'tile-correlation';
+  // Only escalate the color when BOTH this infra AND one of its dependents is red.
+  const infraIsRed = isRed(results[infraVendor.id]);
+  if (infraIsRed && redDependents.length > 0) {
+    line.classList.add('is-correlated');
+    line.innerHTML = '<strong>↑ Possible upstream cause:</strong> '
+      + escapeHtml(redDependentNames.join(', '))
+      + (redDependentNames.length === 1 ? ' is also reporting issues' : ' are also reporting issues');
+  } else {
+    line.innerHTML = '<strong>Dependents we monitor:</strong> ' + escapeHtml(dependentNames.join(', '));
+  }
+
+  // Insert the correlation line before the footer so the layout reads:
+  //   name · status · incident · correlation · footer
+  const footer = tileElement.querySelector('.tile-footer');
+  if (footer) {
+    tileElement.insertBefore(line, footer);
+  } else {
+    tileElement.appendChild(line);
+  }
 }
 
 //=============================================================================
@@ -1348,12 +2185,14 @@ async function fetchVendor(vendor) {
   switch (vendor.type) {
     case 'statuspage':       return fetchStatuspage(vendor);
     case 'instatus':         return fetchInstatus(vendor);
-    case 'm365snapshot':     return fetchM365(vendor);
+    case 'm365service':      return fetchM365Service(vendor);
     case 'elsnapshot':       return fetchExploreLearning(vendor);
     case 'ixlsnapshot':      return fetchIXL(vendor);
     case 'quizizzsnapshot':  return fetchQuizizz(vendor);
     case 'gimkitsnapshot':   return fetchGimkit(vendor);
     case 'soundtrapsnapshot': return fetchSoundtrap(vendor);
+    case 'noredinksnapshot': return fetchNoRedInk(vendor);
+    case 'awssnapshot':      return fetchAWS(vendor);
     default: throw new Error('Unknown vendor type: ' + vendor.type);
   }
 }
@@ -1362,6 +2201,12 @@ async function refreshAll() {
   const btn = document.getElementById('refreshBtn');
   const lastEl = document.getElementById('lastChecked');
   btn.disabled = true;
+
+  // Clear the M365 per-refresh snapshot cache so the four M365 tiles re-fetch
+  // m365.json once this cycle (instead of using last cycle's data). Inside this
+  // single cycle, the cache will hold the JSON so we only fetch once total
+  // even though four tiles consume it.
+  clearM365Cache();
 
   const cache = loadCache();
   const results = {};

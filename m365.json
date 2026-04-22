@@ -1,10 +1,44 @@
 {
   "fetchedAt": "2026-04-22T18:26:00Z",
   "source": "https://status.cloud.microsoft/feed/rss",
-  "status": "Available",
-  "title": "Microsoft Admin Center",
-  "pubDate": "Wed, 22 Apr 2026 18:26:00 Z",
+  "services": {
+    "entra": {
+      "displayName": "Microsoft sign-in (Entra)",
+      "severity": "operational",
+      "status": "Available",
+      "title": "",
+      "pubDate": "",
+      "matchedItemCount": 0
+    },
+    "sharepoint": {
+      "displayName": "OneDrive / SharePoint",
+      "severity": "operational",
+      "status": "Available",
+      "title": "",
+      "pubDate": "",
+      "matchedItemCount": 0
+    },
+    "exchange": {
+      "displayName": "Exchange / Outlook",
+      "severity": "operational",
+      "status": "Available",
+      "title": "",
+      "pubDate": "",
+      "matchedItemCount": 0
+    },
+    "teams": {
+      "displayName": "Microsoft Teams",
+      "severity": "operational",
+      "status": "Available",
+      "title": "",
+      "pubDate": "",
+      "matchedItemCount": 0
+    }
+  },
   "itemCount": 1,
+  "rawItems": [
+    { "title": "Microsoft Admin Center", "status": "Available", "pubDate": "Wed, 22 Apr 2026 18:26:00 Z" }
+  ],
   "parseError": null,
   "lastSuccessfulParse": "2026-04-22T18:26:00Z"
 }

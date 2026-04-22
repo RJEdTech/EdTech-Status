@@ -1,0 +1,200 @@
+name: Fetch NoRedInk status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-noredink:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and parse NoRedInk status page
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          // NoRedInk's status page is hosted on Status.io. Like most third-party
+          // status page platforms, Status.io does not expose a public unauthenticated
+          // JSON endpoint for customer pages (their /v2/ API requires an API key per
+          // customer), so we scrape the rendered HTML.
+          const PAGE_URL = 'https://noredinkstatus.com/';
+          const OUT_PATH = 'noredink.json';
+
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
+                  return;
+                }
+                let body = '';
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
+            });
+          }
+
+          // Detection logic: Status.io renders a top banner with id="statusbar_text"
+          // containing the overall page status in plain text. Known states (based on
+          // Status.io's documented status levels):
+          //
+          //   "All Systems Operational"         -> operational (green)
+          //   "Scheduled Maintenance"           -> maintenance (blue)
+          //   "Degraded Performance"            -> degraded/partial (yellow/orange)
+          //   "Partial System Outage"           -> partial (orange)
+          //   "Major System Outage"             -> major (red)
+          //   "Service Disruption"              -> partial (orange, conservative)
+          //
+          // Confirm we're on the right page by looking for the statusbar_text id
+          // (generic across Status.io pages) AND a NoRedInk-specific marker. If the
+          // id is gone, Status.io has changed their structure; if NoRedInk-specific
+          // markers are gone, the URL probably redirected somewhere else.
+          //
+          // We intentionally do NOT look at background color hex codes for status
+          // detection even though they're present in the HTML. Status.io lets
+          // customers customize their color theme, and NoRedInk's green happens to
+          // be #27AE60 today — but if they ever rebrand, color matching silently
+          // breaks. Text matching is more stable.
+          //
+          // Note on maintenance: the stats widget may show "1 Upcoming Maintenances"
+          // while the overall banner still reads "All Systems Operational" — that's
+          // a scheduled future window, not an active one. We only surface
+          // maintenance severity when the banner itself says so.
+          function detectStatus(html) {
+            // First, confirm we're on a Status.io page
+            const hasStatusbarId = /id=["']statusbar_text["']/i.test(html);
+            if (!hasStatusbarId) {
+              throw new Error('No id="statusbar_text" found — Status.io may have redesigned the page structure.');
+            }
+
+            // Confirm we're on NoRedInk's page specifically (not a redirect)
+            const looksLikeNoRedInk = /NoRedInk/i.test(html) || /noredink\.com/i.test(html);
+            if (!looksLikeNoRedInk) {
+              throw new Error('Status.io page loaded but no NoRedInk markers found — possible redirect.');
+            }
+
+            // Extract the banner text
+            const bannerMatch = html.match(/id=["']statusbar_text["'][^>]*>([^<]+)</i);
+            if (!bannerMatch) {
+              throw new Error('Found statusbar_text id but could not extract banner text — HTML structure changed.');
+            }
+            const bannerText = bannerMatch[1].trim();
+
+            // Map banner text to severity. Check most severe first.
+            if (/major.*outage/i.test(bannerText))               return { severity: 'major',       banner: bannerText };
+            if (/partial.*outage/i.test(bannerText))             return { severity: 'partial',     banner: bannerText };
+            if (/service.*disruption/i.test(bannerText))         return { severity: 'partial',     banner: bannerText };
+            if (/degraded.*performance/i.test(bannerText))       return { severity: 'degraded',    banner: bannerText };
+            if (/scheduled.*maintenance/i.test(bannerText))      return { severity: 'maintenance', banner: bannerText };
+            if (/all.*systems.*operational/i.test(bannerText))   return { severity: 'operational', banner: bannerText };
+
+            // Banner present but text doesn't match any known state. Could be a
+            // state we haven't seen before (Status.io supports custom status labels)
+            // or a new wording. Surface as check_page and capture the banner text
+            // in the JSON so the keyword list can be updated quickly.
+            return { severity: 'check_page', banner: bannerText };
+          }
+
+          (async () => {
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'severity', 'banner', 'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
+            try {
+              const html = await fetchUrl(PAGE_URL);
+              const parsed = detectStatus(html);
+
+              const now = new Date().toISOString();
+              const newContent = {
+                source: PAGE_URL,
+                severity: parsed.severity,
+                banner: parsed.banner,           // raw banner text for debugging / UI
+                parseError: null,
+                lastSuccessfulParse: now
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('No content change — skipping write. Current severity:', parsed.severity);
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            } catch (err) {
+              console.error('Failed to fetch/parse NoRedInk status page:', err.message);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: PAGE_URL,
+                severity: lastGood.severity || 'unknown',
+                banner: lastGood.banner || '',
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add noredink.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update NoRedInk status snapshot [skip ci]"
+            git push
+          fi
+
+      - name: Fail run if scraper is broken
+        # This step exists so the GitHub Actions run shows red whenever the
+        # scraper can't recognize the page, even though we wrote the breakage state
+        # to JSON in a clean exit (so the commit step could run). The dashboard
+        # surfaces breakage from the JSON; this step exists for GitHub-side alerting.
+        run: |
+          if [ -f noredink.json ] && grep -q '"parseError": {' noredink.json; then
+            echo "::error::NoRedInk scraper failed to recognize the page. See noredink.json for details."
+            cat noredink.json
+            exit 1
+          fi
+          echo "NoRedInk scraper succeeded."

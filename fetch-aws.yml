@@ -1,0 +1,223 @@
+name: Fetch AWS status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-aws:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and parse AWS Service Health RSS feed
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          // AWS exposes a combined RSS feed at /rss/all.rss that aggregates every
+          // service and region. AWS docs explicitly warn the format is subject to
+          // change and recommend EventBridge for production — but (a) EventBridge
+          // requires an AWS account and IAM setup we don't want for a public
+          // dashboard, (b) the format has been stable since 2008, and (c) our
+          // scraper surfaces its own breakage loudly if parsing fails.
+          //
+          // What we're parsing: <item> elements. Each item represents a single
+          // status event. AWS uses title prefixes to indicate state:
+          //   "Service is operating normally: [RESOLVED] ..."  -> resolved
+          //   "Informational message: ..."                     -> informational
+          //   "Service disruption: ..."                        -> active incident
+          //   "Performance issues: ..."                        -> active incident
+          //
+          // We only care about UNRESOLVED incidents. Items whose title starts with
+          // "Service is operating normally" are resolutions and should be ignored.
+          //
+          // This scraper is deliberately coarse. AWS has hundreds of service/region
+          // combinations we don't use. We don't try to filter by service — if
+          // anything is broken anywhere at AWS, we surface it and let the human
+          // decide if it matters. For a school dashboard, a false positive here
+          // ("AWS has an issue but it's not affecting us") is cheap; the tile
+          // exists to give context when Canvas/NoRedInk/Quizizz go red.
+          const PAGE_URL = 'https://status.aws.amazon.com/rss/all.rss';
+          const OUT_PATH = 'aws.json';
+
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
+                  return;
+                }
+                let body = '';
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
+            });
+          }
+
+          // Parse the RSS feed and return a list of ACTIVE incidents.
+          //
+          // The feed may contain hundreds of historical items. We use two heuristics
+          // to narrow to "currently active":
+          //   1. Title does NOT start with "Service is operating normally" (those
+          //      are resolutions — the same incident gets re-posted with this prefix
+          //      when it resolves).
+          //   2. pubDate within the last 4 hours. AWS sometimes leaves old items in
+          //      the feed without a resolution marker; a time window prevents stale
+          //      items from showing forever.
+          //
+          // Severity mapping based on title keywords:
+          //   "Service disruption" / "outage" / "unavailable" -> major
+          //   "Performance issues" / "degradation" / "elevated error"  -> partial
+          //   "Informational message" / anything else          -> degraded (quiet)
+          function parseRss(xml) {
+            // Confirm we got an RSS feed
+            if (!/<rss[\s>]/.test(xml)) {
+              throw new Error('Response does not appear to be RSS — AWS may have changed the feed format or URL.');
+            }
+
+            const fourHoursAgoMs = Date.now() - (4 * 60 * 60 * 1000);
+            const items = [];
+            const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+            let match;
+            while ((match = itemRegex.exec(xml)) !== null) {
+              const block = match[1];
+              const titleMatch = block.match(/<title>([\s\S]*?)<\/title>/);
+              const pubMatch = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+              const descMatch = block.match(/<description>([\s\S]*?)<\/description>/);
+              if (!titleMatch) continue;
+
+              const title = titleMatch[1].trim();
+              const pubDate = pubMatch ? new Date(pubMatch[1].trim()) : null;
+              const desc = descMatch ? descMatch[1].trim().slice(0, 200) : '';
+
+              // Skip resolutions
+              if (/^Service is operating normally/i.test(title)) continue;
+
+              // Skip stale items
+              if (pubDate && pubDate.getTime() < fourHoursAgoMs) continue;
+
+              // Determine severity
+              let severity;
+              if (/Service disruption|outage|unavailable/i.test(title))            severity = 'major';
+              else if (/Performance issues|degradation|elevated error/i.test(title)) severity = 'partial';
+              else if (/Informational message/i.test(title))                       severity = 'degraded';
+              else                                                                 severity = 'partial';  // conservative default
+
+              items.push({ title, severity, pubDate: pubDate ? pubDate.toISOString() : null, description: desc });
+            }
+
+            return items;
+          }
+
+          // Aggregate severity from list of active items. Worst wins.
+          function aggregateSeverity(items) {
+            if (items.length === 0) return 'operational';
+            const order = ['operational', 'degraded', 'partial', 'major'];
+            let worst = 'operational';
+            for (const item of items) {
+              if (order.indexOf(item.severity) > order.indexOf(worst)) worst = item.severity;
+            }
+            return worst;
+          }
+
+          (async () => {
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'severity', 'activeCount', 'firstIncidentTitle', 'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
+            try {
+              const xml = await fetchUrl(PAGE_URL);
+              const items = parseRss(xml);
+              const severity = aggregateSeverity(items);
+
+              const now = new Date().toISOString();
+              const newContent = {
+                source: PAGE_URL,
+                severity: severity,
+                activeCount: items.length,
+                firstIncidentTitle: items.length > 0 ? items[0].title : '',
+                parseError: null,
+                lastSuccessfulParse: now
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('No content change — skipping write. Current severity:', severity, '(' + items.length + ' active incidents)');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            } catch (err) {
+              console.error('Failed to fetch/parse AWS RSS feed:', err.message);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: PAGE_URL,
+                severity: lastGood.severity || 'unknown',
+                activeCount: lastGood.activeCount ?? 0,
+                firstIncidentTitle: lastGood.firstIncidentTitle || '',
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add aws.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update AWS status snapshot [skip ci]"
+            git push
+          fi
+
+      - name: Fail run if scraper is broken
+        run: |
+          if [ -f aws.json ] && grep -q '"parseError": {' aws.json; then
+            echo "::error::AWS scraper failed to parse the RSS feed. See aws.json for details."
+            cat aws.json
+            exit 1
+          fi
+          echo "AWS scraper succeeded."

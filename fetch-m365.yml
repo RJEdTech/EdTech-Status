@@ -17,14 +17,61 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch and parse M365 RSS
+      - name: Fetch and parse M365 RSS into per-service status
         run: |
           node <<'EOF'
           const https = require('https');
           const fs = require('fs');
 
+          // The Microsoft 365 RSS feed publishes service incidents as <item> elements.
+          // Each item describes one service issue, advisory, or planned maintenance.
+          // We split that single feed into per-service status so the dashboard can
+          // show separate tiles for the four M365 surfaces that actually matter for
+          // school operations:
+          //
+          //   ENTRA       — sign-in / Entra ID / authentication. If down, Canvas,
+          //                  Blackbaud, OneDrive, Teams, Outlook all become unreachable.
+          //   SHAREPOINT  — OneDrive + SharePoint Online. Where student work lives.
+          //   EXCHANGE    — Exchange Online + Outlook. Mail and calendar.
+          //   TEAMS       — Microsoft Teams. Staff comms, DECA, meetings.
+          //
+          // We deliberately do NOT try to surface every Microsoft service — Power BI,
+          // Yammer/Viva, Forms admin, etc. are noise for our use case. If something we
+          // don't track is degraded, the feed will still contain it but no tile will
+          // light up. That's the right behavior: a Power BI hiccup shouldn't make the
+          // dashboard scream during a teaching day.
+          //
+          // KEYWORDS HONEST UNCERTAINTY:
+          // The current keyword lists are best guesses based on Microsoft's published
+          // service naming conventions. We have not yet observed an actual outage in
+          // this feed, so the keywords may need adjustment when we first see one.
+          // To make that adjustment easy, the output JSON includes a `rawItems` array
+          // with up to 10 raw item titles so we can see what the actual strings look
+          // like and refine the matching.
           const FEED_URL = 'https://status.cloud.microsoft/feed/rss';
           const OUT_PATH = 'm365.json';
+
+          // Service definitions — keyword arrays are checked case-insensitively against
+          // the item <title>. Order in this object determines order in the output JSON.
+          // Add or remove keywords here when we see what Microsoft actually publishes.
+          const SERVICES = {
+            entra: {
+              displayName: 'Microsoft sign-in (Entra)',
+              keywords: ['entra', 'sign-in', 'sign in', 'authentication', 'identity', 'azure ad', 'azuread', 'aad']
+            },
+            sharepoint: {
+              displayName: 'OneDrive / SharePoint',
+              keywords: ['sharepoint', 'onedrive', 'spo ', 'sp online', 'odb ', 'odsp']
+            },
+            exchange: {
+              displayName: 'Exchange / Outlook',
+              keywords: ['exchange', 'outlook', 'exo ', 'eop ', 'mail flow']
+            },
+            teams: {
+              displayName: 'Microsoft Teams',
+              keywords: ['microsoft teams', 'teams ', ' teams', 'teams admin', 'teams chat']
+            }
+          };
 
           function fetchUrl(url) {
             return new Promise((resolve, reject) => {
@@ -40,8 +87,8 @@ jobs:
             });
           }
 
-          // Tiny, dependency-free RSS parser. Microsoft's feed is simple and
-          // stable enough that string extraction is fine — no need for an XML lib.
+          // Tiny string-extraction helpers. Microsoft's feed is simple enough that
+          // regex extraction is fine — no XML lib needed.
           function extractTag(xml, tag) {
             const re = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'i');
             const m = xml.match(re);
@@ -58,8 +105,45 @@ jobs:
             return items;
           }
 
+          // Strip CDATA wrappers since Microsoft sometimes uses them
+          function stripCdata(s) {
+            return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim();
+          }
+
+          // Decide which of our tracked services this item references. An item can
+          // match multiple services (e.g. an outage affecting both Exchange and Teams);
+          // in that case we mark all matched services as affected.
+          function matchServices(title, description) {
+            const haystack = (title + ' ' + description).toLowerCase();
+            const matched = [];
+            for (const [key, svc] of Object.entries(SERVICES)) {
+              if (svc.keywords.some(kw => haystack.includes(kw.toLowerCase()))) {
+                matched.push(key);
+              }
+            }
+            return matched;
+          }
+
+          // Map Microsoft's <status> values to our severity levels.
+          // Known values from the feed: "Available", and (during outages — unconfirmed)
+          // likely "Service degradation", "Service interruption", "Restored", "Investigating".
+          // Any non-Available status we don't recognize is treated as 'partial' (visible
+          // but not catastrophic) so we don't miss anything. Once we see real outage
+          // values, we can refine this mapping.
+          function mapStatusToSeverity(status) {
+            const s = (status || '').trim().toLowerCase();
+            if (s === 'available' || s === 'restored' || s === '') return 'operational';
+            if (s.includes('interruption') || s.includes('outage') || s.includes('unavailable')) return 'major';
+            if (s.includes('degradation') || s.includes('degraded')) return 'partial';
+            if (s.includes('investigating') || s.includes('extended')) return 'partial';
+            if (s.includes('advisory') || s.includes('information')) return 'degraded';
+            return 'partial';  // unknown non-Available → conservative default
+          }
+
+          // Take the worst severity from a list (operational < degraded < partial < major)
+          const SEVERITY_RANK = { operational: 0, degraded: 1, partial: 2, major: 3 };
+
           (async () => {
-            // Helper: read existing snapshot if present
             function readExisting() {
               if (!fs.existsSync(OUT_PATH)) return null;
               try {
@@ -69,12 +153,25 @@ jobs:
               }
             }
 
-            // Helper: compare two objects' content fields (ignoring volatile timestamps)
+            // Compare just the service severity + title fields across runs so we don't
+            // commit on every timestamp tick. We DO commit when rawItems changes
+            // meaningfully (item count differs) so that during outages we capture the
+            // changing state of the feed for diagnostic purposes.
             function contentEqual(a, b) {
               if (!a || !b) return false;
-              const fields = ['source', 'status', 'title', 'pubDate', 'itemCount',
-                              'parseError', 'lastSuccessfulParse'];
-              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+              if (JSON.stringify(a.parseError) !== JSON.stringify(b.parseError)) return false;
+              if (!a.services || !b.services) return false;
+              for (const key of Object.keys(SERVICES)) {
+                const sa = a.services[key] || {};
+                const sb = b.services[key] || {};
+                if (sa.severity !== sb.severity) return false;
+                if (sa.title !== sb.title) return false;
+                if (sa.status !== sb.status) return false;
+              }
+              const aCount = (a.rawItems || []).length;
+              const bCount = (b.rawItems || []).length;
+              if (aCount !== bCount) return false;
+              return true;
             }
 
             const existing = readExisting();
@@ -87,25 +184,62 @@ jobs:
                 throw new Error('No <item> elements found in feed — Microsoft may have changed the feed structure.');
               }
 
-              const firstItem = items[0];
-              const status = extractTag(firstItem, 'status');
-              const title = extractTag(firstItem, 'title');
-              const pubDate = extractTag(firstItem, 'pubDate');
+              // Per-service aggregation: collect every matching item per service, then
+              // take the worst severity. This way if Exchange has both an active outage
+              // AND an advisory, the tile reflects the worst one.
+              const serviceState = {};
+              for (const key of Object.keys(SERVICES)) {
+                serviceState[key] = {
+                  displayName: SERVICES[key].displayName,
+                  severity: 'operational',
+                  status: 'Available',
+                  title: '',
+                  pubDate: '',
+                  matchedItemCount: 0
+                };
+              }
 
-              // Defensive: status must be present and non-empty for us to trust the feed.
-              if (!status) {
-                throw new Error('First <item> missing <status> element — feed schema may have changed.');
+              // Sample of raw items for debugging (first 10, full content). When matching
+              // fails during a real outage, this is what we'll inspect to fix keywords.
+              const rawItems = [];
+
+              for (const item of items) {
+                const title = stripCdata(extractTag(item, 'title'));
+                const description = stripCdata(extractTag(item, 'description'));
+                const status = stripCdata(extractTag(item, 'status'));
+                const pubDate = stripCdata(extractTag(item, 'pubDate'));
+
+                if (rawItems.length < 10) {
+                  rawItems.push({ title, status, pubDate });
+                }
+
+                const matched = matchServices(title, description);
+                if (matched.length === 0) continue;
+
+                const severity = mapStatusToSeverity(status);
+
+                for (const key of matched) {
+                  const current = serviceState[key];
+                  // Track worst severity per service. Hold onto the title of the worst
+                  // item so the tile shows the most-urgent issue, not just the first.
+                  if (SEVERITY_RANK[severity] >= SEVERITY_RANK[current.severity]) {
+                    current.severity = severity;
+                    current.status = status || current.status;
+                    current.title = title || current.title;
+                    current.pubDate = pubDate || current.pubDate;
+                  }
+                  current.matchedItemCount += 1;
+                }
               }
 
               const now = new Date().toISOString();
               const newContent = {
                 source: FEED_URL,
-                status: status,
-                title: title || '',
-                pubDate: pubDate || '',
+                services: serviceState,
                 itemCount: items.length,
-                parseError: null,            // explicitly cleared on success
-                lastSuccessfulParse: now     // updated on every successful parse
+                rawItems: rawItems,
+                parseError: null,
+                lastSuccessfulParse: now
               };
 
               if (contentEqual(newContent, existing)) {
@@ -116,21 +250,34 @@ jobs:
               const snapshot = { fetchedAt: now, ...newContent };
               fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
               console.log('Status content changed — wrote', OUT_PATH);
-              console.log(JSON.stringify(snapshot, null, 2));
+              console.log(JSON.stringify(snapshot.services, null, 2));
             } catch (err) {
-              // Don't lose the last-known status. Preserve everything from the last good
-              // fetch and layer parseError on top so the dashboard can flag the breakage
-              // while still showing the most recent valid reading.
               console.error('Failed to fetch/parse M365 RSS:', err.message);
 
               const now = new Date().toISOString();
               const lastGood = existing || {};
+
+              // On scraper failure, preserve the last-known per-service state and
+              // overlay parseError. The dashboard's M365 fetcher knows to surface
+              // breakage when parseError is set.
               const newContent = {
                 source: FEED_URL,
-                status: lastGood.status || 'Unknown',
-                title: lastGood.title || '',
-                pubDate: lastGood.pubDate || '',
+                services: lastGood.services || (() => {
+                  const fallback = {};
+                  for (const key of Object.keys(SERVICES)) {
+                    fallback[key] = {
+                      displayName: SERVICES[key].displayName,
+                      severity: 'unknown',
+                      status: 'Unknown',
+                      title: '',
+                      pubDate: '',
+                      matchedItemCount: 0
+                    };
+                  }
+                  return fallback;
+                })(),
                 itemCount: lastGood.itemCount ?? 0,
+                rawItems: lastGood.rawItems || [],
                 parseError: {
                   message: err.message,
                   firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
@@ -146,7 +293,6 @@ jobs:
               const snapshot = { fetchedAt: now, ...newContent };
               fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
               console.log('Wrote breakage snapshot to', OUT_PATH);
-              console.log(JSON.stringify(snapshot, null, 2));
             }
           })();
           EOF
@@ -164,10 +310,9 @@ jobs:
           fi
 
       - name: Fail run if scraper is broken
-        # This step exists so the GitHub Actions run shows red whenever the
-        # scraper can't parse the feed, even though we wrote the breakage state
-        # to JSON in a clean exit (so the commit step could run). The dashboard
-        # surfaces breakage from the JSON; this step exists for GitHub-side alerting.
+        # Loud failure for GitHub-side alerting when the scraper can't parse the feed.
+        # The breakage state is already in the JSON via clean exit above; this step
+        # exists so the Actions run goes red and we get notified.
         run: |
           if [ -f m365.json ] && grep -q '"parseError": {' m365.json; then
             echo "::error::M365 scraper failed to parse the feed. See m365.json for details."
