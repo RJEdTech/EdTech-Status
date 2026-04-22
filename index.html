@@ -493,18 +493,11 @@
   </div>
   <div class="grid grid-infra" id="infraGrid"></div>
 
-  <div class="section-label">
-    <span>Status pages without live data</span>
-    <span class="section-label-note">Manual check required</span>
-  </div>
-  <div class="grid grid-secondary" id="linkOnlyGrid"></div>
-
   <footer class="page-foot">
     <p><strong>About this dashboard.</strong> Status pages reflect what vendors choose to report and can lag actual outages by 30 minutes or more. Treat this as a first signal, not a definitive answer. If teachers report a problem and the tile is still green, the problem is real.</p>
     <p style="margin-top: 10px;"><strong>Why tools are tiered.</strong> Critical services (Microsoft sign-in, OneDrive/SharePoint, Outlook, Canvas) stop the school day if they're down. Core services (Teams, Blackbaud, Vivi, Flint) cause significant disruption but teaching can continue. Secondary tools affect individual classes at most. The summary banner weights these accordingly — a Canvas outage rings louder than a Gimkit outage even at the same severity.</p>
     <p style="margin-top: 10px;"><strong>Microsoft 365 is split into four tiles.</strong> Each tile reads from the same M365 RSS feed but filters for items relevant to that service (Entra/sign-in, OneDrive/SharePoint, Exchange/Outlook, Teams). Other M365 services Microsoft reports on (Power BI, Yammer, etc.) are intentionally not surfaced — they don't affect teaching.</p>
     <p style="margin-top: 10px;"><strong>Supporting infrastructure is context, not alert.</strong> AWS and Cloudflare underpin many of the tools above (Canvas, NoRedInk, Quizizz, and others). Issues at this layer don't necessarily mean anything is broken at Regis Jesuit — Cloudflare and AWS can have regional problems that never reach Aurora. These tiles exist to explain outages higher up. When a tool goes red <em>and</em> its infrastructure dependency is also red, the banner notes "possible upstream cause" so you know the root issue may not be the tool itself.</p>
-    <p style="margin-top: 10px;"><strong>Why some tiles are link-only.</strong> DeltaMath is aggregated by StatusGator, which requires an account for API access. Click the tile to see the vendor's page.</p>
     <p style="margin-top: 10px;">Built and maintained by Jason Beyer · RJEdTech</p>
   </footer>
 
@@ -743,6 +736,20 @@ const VENDORS = [
     apiUrl: 'noredink.json',
     pageUrl: 'https://noredinkstatus.com/'
   },
+  // DeltaMath (Atlassian Statuspage v2 with public CORS-enabled API, so we
+  // fetch directly in the browser — no GitHub Action needed. Same code path
+  // as Canvas, AspirEDU, Cloudflare, etc. Previously a StatusGator link-only
+  // tile until we discovered DeltaMath has its own first-party status page.)
+  {
+    id: 'deltamath',
+    name: 'DeltaMath',
+    sub: 'status.deltamath.com',
+    tier: 'secondary',
+    type: 'statuspage',
+    apiUrl: 'https://status.deltamath.com/api/v2/status.json',
+    summaryUrl: 'https://status.deltamath.com/api/v2/summary.json',
+    pageUrl: 'https://status.deltamath.com/'
+  },
 
   // ============================================================
   // INFRASTRUCTURE (2) — platforms our tools depend on
@@ -781,18 +788,6 @@ const VENDORS = [
     apiUrl: 'https://www.cloudflarestatus.com/api/v2/status.json',
     summaryUrl: 'https://www.cloudflarestatus.com/api/v2/summary.json',
     pageUrl: 'https://www.cloudflarestatus.com/'
-  },
-
-  // ============================================================
-  // LINK-ONLY (no live data, manual check)
-  // ============================================================
-  {
-    id: 'deltamath',
-    name: 'DeltaMath',
-    sub: 'Aggregated by StatusGator',
-    tier: 'linkonly',
-    type: 'linkonly',
-    pageUrl: 'https://statusgator.com/services/deltamath'
   }
 ];
 
@@ -2063,7 +2058,7 @@ function renderSummary(results) {
   if (infraIssues > 0) countsLine += ' (' + infraIssues + ' issue' + (infraIssues === 1 ? '' : 's') + ')';
   if (broken > 0) countsLine += ' · ' + broken + ' broken';
   if (unknown > 0) countsLine += ' · ' + unknown + ' unknown';
-  countsLine += ' · ' + linkOnly + ' link-only';
+  if (linkOnly > 0) countsLine += ' · ' + linkOnly + ' link-only';
   counts.textContent = countsLine;
 
   // Stash correlations for renderAll to use when decorating infra tiles
@@ -2075,12 +2070,16 @@ function renderAll(results) {
   const coreGrid = document.getElementById('coreGrid');
   const secondaryGrid = document.getElementById('secondaryGrid');
   const infraGrid = document.getElementById('infraGrid');
+  // linkGrid may not exist in the DOM — the link-only section is removed when
+  // no link-only vendors are configured. Code below is null-safe so adding
+  // another link-only tool back is just a matter of restoring the section
+  // header in the HTML and adding the vendor entry.
   const linkGrid = document.getElementById('linkOnlyGrid');
   criticalGrid.innerHTML = '';
   coreGrid.innerHTML = '';
   secondaryGrid.innerHTML = '';
   infraGrid.innerHTML = '';
-  linkGrid.innerHTML = '';
+  if (linkGrid) linkGrid.innerHTML = '';
 
   // Sort within each tier: incidents first (worst on top), then operational,
   // then unknown. Same logic per-tier as before tiers existed; we just apply
@@ -2124,8 +2123,10 @@ function renderAll(results) {
     infraGrid.appendChild(tile);
   }
 
-  for (const v of linkOnlyVendors) {
-    linkGrid.appendChild(renderTile(v, null));
+  if (linkGrid) {
+    for (const v of linkOnlyVendors) {
+      linkGrid.appendChild(renderTile(v, null));
+    }
   }
 }
 

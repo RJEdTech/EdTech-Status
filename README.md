@@ -12,7 +12,7 @@ It auto-refreshes every five minutes when the tab is visible and pauses when the
 
 ## Tier system
 
-Tools are grouped into three live tiers plus a link-only section. The tier drives both the visual size of the tile and how the summary banner weights the tool when something goes wrong.
+Tools are grouped into four tiers (critical, core, secondary, and supporting infrastructure). The tier drives both the visual size of the tile and how the summary banner weights the tool when something goes wrong.
 
 **Critical (4) — school-day-blocking.** If any of these are down, teaching or operations stop or get severely impaired. Microsoft sign-in (Entra ID) is in this tier because every other Microsoft service plus Canvas, Blackbaud, OneDrive, Teams, and Outlook all depend on it for SSO authentication — if Entra goes down, the cascade hits everything.
 
@@ -28,7 +28,7 @@ Tools are grouped into three live tiers plus a link-only section. The tier drive
 - Vivi
 - Flint
 
-**Secondary (9) — Canvas integrations and side tools.** Affect individual classes at most.
+**Secondary (11) — Canvas integrations and side tools.** Affect individual classes at most.
 
 - Respondus (LockDown Browser & Monitor)
 - Copyleaks
@@ -39,10 +39,8 @@ Tools are grouped into three live tiers plus a link-only section. The tier drive
 - Quizizz / Wayground
 - Gimkit
 - Soundtrap
-
-**Link-only (2) — no live data, manual check required.**
-
-- NoRedInk, DeltaMath (aggregated by StatusGator, which requires an account for API access)
+- NoRedInk
+- DeltaMath
 
 ## How the summary banner weights tiers
 
@@ -54,7 +52,7 @@ The banner at the top is the first thing the eye lands on. The wording and color
 - **Scraper broken only** → slate banner ("status check broken — verify those tools manually") because it's a meta-problem with the dashboard, not a vendor outage.
 - **All clear** → green.
 
-The counts line below the banner gives a tier-by-tier breakdown: `Critical: 4/4 ok · Core: 3/4 ok (1 issue) · Secondary: 9/9 ok · 2 link-only`.
+The counts line below the banner gives a tier-by-tier breakdown: `Critical: 4/4 ok · Core: 3/4 ok (1 issue) · Secondary: 11/11 ok · Infra: 2/2 ok`.
 
 ## How to read the dashboard
 
@@ -64,7 +62,6 @@ The counts line below the banner gives a tier-by-tier breakdown: `Critical: 4/4 
 - **Red dot** — major outage
 - **Slate dot with wrench glyph** — *status check broken*. The dashboard tried to read this vendor's status and either couldn't reach the source or didn't recognize the response. The vendor itself may be fine; you just have to verify manually by clicking through.
 - **Gray dot** — status couldn't be reached (cached value shown if available)
-- **Hollow circle** — link-only tile, manual check required
 
 When a vendor reports an incident, the tile expands to show the incident name, current state, and how recently it was updated.
 
@@ -121,7 +118,7 @@ Adjust the keyword lists or status mapping in the YAML when the first real outag
 
 ### GitHub Actions workflows (CORS workarounds and scraping)
 
-Six vendors don't expose a browser-fetchable JSON endpoint, so a GitHub Actions workflow scrapes each one every 5 minutes, parses the result server-side, and commits the snapshot back to the repo. The dashboard then reads that JSON file from same-origin — no CORS issue.
+Seven vendors don't expose a browser-fetchable JSON endpoint, so a GitHub Actions workflow scrapes each one every 5 minutes, parses the result server-side, and commits the snapshot back to the repo. The dashboard then reads that JSON file from same-origin — no CORS issue.
 
 - **Microsoft 365** (`.github/workflows/fetch-m365.yml` → `m365.json`) — see "Microsoft 365" section above for service-filtering details.
 - **ExploreLearning** (`.github/workflows/fetch-explorelearning.yml` → `explorelearning.json`) — no machine-readable feed exists. The workflow scrapes the public site-status page and looks for two specific markers (`id="site-status-a-ok"` and the green "A-OK!" heading). When both are present, status is operational; anything else surfaces as "check page" and the user clicks through.
@@ -129,8 +126,11 @@ Six vendors don't expose a browser-fetchable JSON endpoint, so a GitHub Actions 
 - **Quizizz / Wayground** (`.github/workflows/fetch-quizizz.yml` → `quizizz.json`) — Quizizz's status page is hosted on Freshping (a Freshworks product) which has no public unauthenticated JSON. The workflow scrapes the rendered banner and maps to one of `operational`, `partial`, `major`, or `maintenance`. Note: Quizizz has been rebranded to "Wayground" but everyone still calls it Quizizz, so the tile keeps the Quizizz label.
 - **Gimkit** (`.github/workflows/fetch-gimkit.yml` → `gimkit.json`) — Gimkit's status page is hosted on Crisp Status. Crisp's REST API is for managing pages from the operator side, not for reading public status. The workflow scrapes the rendered banner and maps Crisp's healthy/sick/dead replica states to one of `operational`, `degraded`, `partial`, or `major`.
 - **Soundtrap** (`.github/workflows/fetch-soundtrap.yml` → `soundtrap.json`) — the most minimal status page in the portfolio. A single sentence ("Soundtrap is working fine.") on an otherwise bare HTML page, no API, no structured data. The scraper detects presence/absence of that exact string. Because only one bit of state is exposed, the tile shows operational or "see vendor page" — no degraded/partial nuance is possible.
+- **NoRedInk** (`.github/workflows/fetch-noredink.yml` → `noredink.json`) — `noredinkstatus.com` is hosted on Status.io, which has no public unauthenticated JSON endpoint. The workflow scrapes the rendered banner from the `id="statusbar_text"` element and maps to one of `operational`, `degraded`, `partial`, `major`, or `maintenance`. Replaces the previous StatusGator link-only tile.
 
-All six workflows only commit when the status content actually changes — not on every timestamp tick — so the repo doesn't fill up with noise commits. If a vendor changes their page structure and the scraper can't find what it expects, the workflow exits with a non-zero status (loud failure beats silent wrong data).
+All seven workflows only commit when the status content actually changes — not on every timestamp tick — so the repo doesn't fill up with noise commits. If a vendor changes their page structure and the scraper can't find what it expects, the workflow exits with a non-zero status (loud failure beats silent wrong data).
+
+**DeltaMath** does *not* need a workflow even though it was previously a StatusGator link-only tile. DeltaMath runs its own first-party Atlassian Statuspage at `status.deltamath.com`, which exposes the standard public CORS-enabled `/api/v2/status.json` endpoint — same code path as Canvas, AspirEDU, Kahoot, Respondus, and Cloudflare. The earlier assumption that DeltaMath was only reachable via StatusGator turned out to be wrong; their own status page just isn't widely linked.
 
 ## Privacy
 
