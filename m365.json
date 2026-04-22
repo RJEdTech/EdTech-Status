@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-04-22T18:26:00Z",
+  "fetchedAt": "2026-04-22T21:40:57.489Z",
   "source": "https://status.cloud.microsoft/feed/rss",
   "services": {
     "entra": {
@@ -37,8 +37,15 @@
   },
   "itemCount": 1,
   "rawItems": [
-    { "title": "Microsoft Admin Center", "status": "Available", "pubDate": "Wed, 22 Apr 2026 18:26:00 Z" }
+    {
+      "title": "Microsoft Admin Center",
+      "status": "Available",
+      "pubDate": "Wed, 22 Apr 2026 18:26:00 Z"
+    }
   ],
-  "parseError": null,
+  "parseError": {
+    "message": "No <item> elements found in feed — Microsoft may have changed the feed structure.",
+    "firstFailedAt": "2026-04-22T21:40:57.489Z"
+  },
   "lastSuccessfulParse": "2026-04-22T18:26:00Z"
 }
