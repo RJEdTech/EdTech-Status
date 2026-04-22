@@ -626,6 +626,13 @@
     margin-top: 0;
     padding-top: 0;
   }
+  /* In compact (non-expanded) mode the tile uses flex-direction: row, and an
+     in-flow .tile-expand — even with max-height: 0 — still consumes flex
+     space and shoves the status row into the name. Take it out of flow until
+     it's actually being shown. */
+  .tile.is-compact:not(.is-expanded) .tile-expand {
+    display: none;
+  }
   .tile.is-expanded .tile-expand {
     max-height: 400px;
     opacity: 1;
