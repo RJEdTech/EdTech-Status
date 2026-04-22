@@ -633,15 +633,39 @@
     margin-top: 8px;
     padding-top: 12px;
   }
-  /* In compact mode we still want the expand to work — just push it visually
-     into the right place by giving the tile a small vertical gap when open. */
+  /* When a compact tile is expanded, restore most of the full-tile layout —
+     stack rows vertically, show the sub line and footer, lift padding to
+     match full mode. Otherwise the row-based layout collapses awkwardly
+     with status text crowding the name and the footer link hidden. */
   .tile.is-compact.is-expanded {
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
+    gap: 10px;
+    padding: 16px 18px;
+  }
+  .tile.is-compact.is-expanded .tile-sub {
+    display: block;
+    font-size: 12px;
+    color: var(--ink-dim);
+    margin-top: 2px;
   }
   .tile.is-compact.is-expanded .status-row {
     margin-left: 0;
+  }
+  .tile.is-compact.is-expanded .tile-name {
+    font-size: 15px;
+  }
+  .tile.is-compact.is-expanded .status-text {
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .tile.is-compact.is-expanded .dot {
+    width: 10px;
+    height: 10px;
+  }
+  .tile.is-compact.is-expanded .tile-footer {
+    display: flex;
   }
 
   .tile-expand-row {
