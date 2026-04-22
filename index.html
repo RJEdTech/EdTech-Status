@@ -317,7 +317,7 @@
 
   <footer class="page-foot">
     <p><strong>About this dashboard.</strong> Status pages reflect what vendors choose to report and can lag actual outages by 30 minutes or more. Treat this as a first signal, not a definitive answer. If teachers report a problem and the tile is still green, the problem is real.</p>
-    <p style="margin-top: 10px;"><strong>Why some tiles are link-only.</strong> NoRedInk and DeltaMath are aggregated by StatusGator, which requires an account for API access. IXL doesn't expose machine-readable status. Click the tile to see the vendor's page.</p>
+    <p style="margin-top: 10px;"><strong>Why some tiles are link-only.</strong> NoRedInk and DeltaMath are aggregated by StatusGator, which requires an account for API access. Click the tile to see the vendor's page.</p>
     <p style="margin-top: 10px;">Built and maintained by Jason Beyer · RJEdTech</p>
   </footer>
 
@@ -421,11 +421,14 @@ const VENDORS = [
     summaryUrl: 'https://aspiredu.statuspage.io/api/v2/summary.json',
     pageUrl: 'https://aspiredu.statuspage.io/'
   },
+  // IXL (status.ixl.com is hosted on Uptime.com, which has no public unauthenticated
+  // JSON endpoint, so we scrape the inline JS blob via GitHub Actions to ixl.json)
   {
     id: 'ixl',
     name: 'IXL',
-    sub: 'Static status page',
-    type: 'linkonly',
+    sub: 'status.ixl.com',
+    type: 'ixlsnapshot',
+    apiUrl: 'ixl.json',
     pageUrl: 'https://status.ixl.com/'
   }
 ];
@@ -622,6 +625,64 @@ async function fetchExploreLearning(vendor) {
       status: 'See vendor status page',
       updatedAt: null
     };
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
+// IXL snapshot file:
+//   Written by the .github/workflows/fetch-ixl.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//   status.ixl.com is hosted on Uptime.com, which has no public unauthenticated
+//   JSON endpoint. The workflow scrapes the page and pulls four key flags out
+//   of the inline JS blob: global_is_operational, has_components_under_maintenance_state,
+//   has_components_under_critical_state, and the active_incidents array.
+//   The workflow does the severity mapping itself and writes the result to ixl.json,
+//   so this function just reads the pre-computed severity and renders.
+async function fetchIXL(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  const severity = data.severity || 'operational';
+  let statusText;
+  let incident = null;
+
+  switch (severity) {
+    case 'operational':
+      statusText = 'All systems operational';
+      break;
+    case 'maintenance':
+      statusText = 'Scheduled maintenance in progress';
+      incident = {
+        name: data.firstIncidentName || 'Maintenance window',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    case 'partial':
+      statusText = 'Partial outage reported';
+      incident = {
+        name: data.firstIncidentName || 'IXL is reporting an issue',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    case 'major':
+      statusText = 'Major outage reported';
+      incident = {
+        name: data.firstIncidentName || 'Critical issue affecting IXL',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    default:
+      statusText = 'Status unknown — see vendor page';
   }
 
   return {
@@ -879,6 +940,7 @@ async function fetchVendor(vendor) {
     case 'instatus':      return fetchInstatus(vendor);
     case 'm365snapshot':  return fetchM365(vendor);
     case 'elsnapshot':    return fetchExploreLearning(vendor);
+    case 'ixlsnapshot':   return fetchIXL(vendor);
     default: throw new Error('Unknown vendor type: ' + vendor.type);
   }
 }

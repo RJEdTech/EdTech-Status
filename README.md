@@ -19,13 +19,14 @@ It auto-refreshes every five minutes when the tab is visible and pauses when the
 - **Respondus** — LockDown Browser and Monitor
 - **Vivi** — wireless display and screen mirroring
 - **Copyleaks** — AI detection and plagiarism
-- **Microsoft 365** — Admin Center status
+- **Microsoft 365** — Admin Center status (scraped via GitHub Actions, see Architecture below)
+- **ExploreLearning** (Gizmos, Reflex, Frax) — static status page scraped via GitHub Actions
+- **IXL** — `status.ixl.com` scraped via GitHub Actions
+- **AspirEDU** (Grade Guardian, Dropout Detective, Instructor Insight) — Atlassian Statuspage
 
 **Status pages without live data (link only):**
 
-- **NoRedInk**, **DeltaMath**, **AspirEDU** (Grade Guardian) — only available through StatusGator, which requires an account for API access
-- **IXL** — runs on Uptime.com without a public unauthenticated JSON endpoint
-- **ExploreLearning** (Gizmos, Reflex, Frax) — static status page, no machine-readable feed
+- **NoRedInk**, **DeltaMath** — only available through StatusGator, which requires an account for API access
 
 ## How to read the dashboard
 
@@ -50,11 +51,15 @@ Single-file vanilla HTML/JS, no build step, no framework dependencies. Hosted on
 
 The dashboard makes external API calls to vendor status endpoints — this is a deliberate exception to the standard RJEdTech "no external calls" rule, because the entire purpose of the tool is aggregating those calls. No user data is collected, no analytics are sent, and the only thing stored locally is a cache of the most recent status response per vendor (used as a fallback when an API call fails).
 
-### Microsoft 365 (special case)
+### GitHub Actions workflows (CORS workarounds and scraping)
 
-Microsoft's status RSS feed doesn't send the CORS header browsers require for cross-origin requests, so the dashboard can't fetch it directly from the client. To work around this, a GitHub Actions workflow (`.github/workflows/fetch-m365.yml`) runs every 5 minutes, fetches the feed server-side, parses it, and commits the result as `m365.json`. The dashboard then reads that JSON file from same-origin, no CORS issue.
+Three vendors don't expose a browser-fetchable JSON endpoint, so a GitHub Actions workflow scrapes each one every 5 minutes, parses the result server-side, and commits the snapshot back to the repo. The dashboard then reads that JSON file from same-origin — no CORS issue.
 
-The workflow only commits when the status content actually changes — not on every timestamp tick — so the repo doesn't fill up with noise commits.
+- **Microsoft 365** (`.github/workflows/fetch-m365.yml` → `m365.json`) — Microsoft's status RSS feed doesn't send the CORS header browsers require for cross-origin requests. The workflow fetches the feed, parses the first `<item>`, and writes the status field.
+- **ExploreLearning** (`.github/workflows/fetch-explorelearning.yml` → `explorelearning.json`) — no machine-readable feed exists. The workflow scrapes the public site-status page and looks for two specific markers (`id="site-status-a-ok"` and the green "A-OK!" heading). When both are present, status is operational; anything else surfaces as "check page" and the user clicks through.
+- **IXL** (`.github/workflows/fetch-ixl.yml` → `ixl.json`) — `status.ixl.com` is hosted on Uptime.com, which has no public unauthenticated JSON endpoint. The workflow fetches the page and pulls four flags out of the inline JS blob the React controller is initialized with: `global_is_operational`, `has_components_under_maintenance_state`, `has_components_under_critical_state`, and the `active_incidents` array. The workflow does the severity mapping itself and writes the result.
+
+All three workflows only commit when the status content actually changes — not on every timestamp tick — so the repo doesn't fill up with noise commits. If a vendor changes their page structure and the scraper can't find what it expects, the workflow exits with a non-zero status (loud failure beats silent wrong data).
 
 ## Privacy
 

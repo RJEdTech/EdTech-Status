@@ -1,0 +1,10 @@
+{
+  "fetchedAt": "2026-04-22T18:48:47Z",
+  "source": "https://status.ixl.com/",
+  "severity": "operational",
+  "isOperational": true,
+  "isMaintenance": false,
+  "isCritical": false,
+  "incidentCount": 0,
+  "firstIncidentName": ""
+}
