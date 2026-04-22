@@ -180,8 +180,16 @@ jobs:
               const xml = await fetchUrl(FEED_URL);
               const items = extractAllItems(xml);
 
-              if (items.length === 0) {
-                throw new Error('No <item> elements found in feed — Microsoft may have changed the feed structure.');
+              // Defensive check: confirm we got an RSS document at all, even if
+              // the item list is empty. If neither <rss nor <channel are present,
+              // Microsoft has restructured the feed format and we should fail
+              // loudly. But an empty list of <item> elements during a quiet
+              // period is the EXPECTED state — Microsoft only publishes items
+              // when there's an active incident, advisory, or maintenance
+              // window. "No items" means "all clear," not a parse failure.
+              const looksLikeRss = /<rss[\s>]|<channel[\s>]/.test(xml);
+              if (!looksLikeRss) {
+                throw new Error('Response does not appear to be RSS — Microsoft may have changed the feed format or URL.');
               }
 
               // Per-service aggregation: collect every matching item per service, then
