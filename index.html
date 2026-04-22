@@ -753,47 +753,23 @@
 //                 same as a Canvas outage.
 //   'linkonly'  = no live data available, manual check required. Bottom section.
 //
-// SPECIAL CASE — M365 services share a single source:
-// The four Microsoft tiles (entra, sharepoint, exchange, teams) all read from
-// the same m365.json snapshot file (written by .github/workflows/fetch-m365.yml,
-// which filters the M365 RSS feed by service-name keywords). Each entry has a
-// `serviceKey` field that the m365service fetcher uses to pull its specific
-// service's status from the shared snapshot.
+// SPECIAL CASE — Microsoft 365 is link-only:
+// Microsoft locks the Service Health API behind tenant authentication (Graph
+// API + admin consent), and the public RSS feed sets CORS headers that block
+// browser fetches. The GitHub Actions RSS scrape we tried also proved fragile.
+// We surface a single combined Microsoft 365 tile that links to the M365
+// status page for manual checking.
 const VENDORS = [
   // ============================================================
-  // CRITICAL (4) — school-day-blocking
+  // CRITICAL (2) — school-day-blocking
   // ============================================================
   {
-    id: 'm365_entra',
+    id: 'm365',
     task: 'teach',
-    name: 'Microsoft sign-in',
-    sub: 'Entra ID — auth foundation for everything',
+    name: 'Microsoft 365',
+    sub: 'Sign-in, OneDrive/SharePoint, Outlook, Teams — manual check',
     tier: 'critical',
-    type: 'm365service',
-    serviceKey: 'entra',
-    apiUrl: 'm365.json',
-    pageUrl: 'https://status.cloud.microsoft/'
-  },
-  {
-    id: 'm365_sharepoint',
-    task: 'teach',
-    name: 'OneDrive / SharePoint',
-    sub: 'Where student work lives',
-    tier: 'critical',
-    type: 'm365service',
-    serviceKey: 'sharepoint',
-    apiUrl: 'm365.json',
-    pageUrl: 'https://status.cloud.microsoft/'
-  },
-  {
-    id: 'm365_exchange',
-    task: 'comm',
-    name: 'Exchange / Outlook',
-    sub: 'Mail and calendar',
-    tier: 'critical',
-    type: 'm365service',
-    serviceKey: 'exchange',
-    apiUrl: 'm365.json',
+    type: 'linkonly',
     pageUrl: 'https://status.cloud.microsoft/'
   },
   {
@@ -810,19 +786,8 @@ const VENDORS = [
   },
 
   // ============================================================
-  // CORE (4) — significant impact but not blocking
+  // CORE (3) — significant impact but not blocking
   // ============================================================
-  {
-    id: 'm365_teams',
-    task: 'comm',
-    name: 'Microsoft Teams',
-    sub: 'Staff comms, DECA, meetings',
-    tier: 'core',
-    type: 'm365service',
-    serviceKey: 'teams',
-    apiUrl: 'm365.json',
-    pageUrl: 'https://status.cloud.microsoft/'
-  },
   {
     // Blackbaud's status page rolls up dozens of components across many products
     // (RE NXT, FE NXT, Luminate, YourCause, etc). The top-level indicator fires
@@ -1267,131 +1232,6 @@ function mapInstatusImpact(impact) {
   }
 }
 
-// Microsoft 365 per-service snapshot file:
-//   Written by the .github/workflows/fetch-m365.yml workflow every 5 minutes.
-//   Same-origin fetch, so no CORS issues.
-//   The workflow filters the M365 RSS feed by service-name keywords and writes
-//   per-service status under data.services[serviceKey]. Each M365 vendor entry
-//   in the dashboard config has a `serviceKey` field naming which service
-//   bucket it pulls from ('entra', 'sharepoint', 'exchange', 'teams').
-//
-// Per-refresh caching:
-//   All four M365 tiles share the same JSON file. Without caching, a single
-//   refreshAll() would fetch m365.json four times. The cache holds the parsed
-//   JSON for the duration of a single refreshAll() call (cleared at the start
-//   of each refresh by clearM365Cache()) so we fetch once per cycle.
-let m365SnapshotCache = null;
-let m365SnapshotCachePromise = null;
-
-function clearM365Cache() {
-  m365SnapshotCache = null;
-  m365SnapshotCachePromise = null;
-}
-
-async function loadM365Snapshot(apiUrl) {
-  if (m365SnapshotCache) return m365SnapshotCache;
-  // If a fetch is already in flight (parallel tile fetches), reuse its promise
-  // rather than racing duplicate requests.
-  if (m365SnapshotCachePromise) return m365SnapshotCachePromise;
-
-  m365SnapshotCachePromise = (async () => {
-    const res = await fetch(apiUrl, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    m365SnapshotCache = data;
-    return data;
-  })();
-  return m365SnapshotCachePromise;
-}
-
-async function fetchM365Service(vendor) {
-  const data = await loadM365Snapshot(vendor.apiUrl);
-
-  // If the workflow itself failed (couldn't fetch or parse the RSS feed), every
-  // M365 tile shows breakage with that service's last-known severity.
-  if (data.parseError) {
-    const svcLastKnown = data.services && data.services[vendor.serviceKey];
-    return buildBreakageResult({
-      vendorPageLabel: 'Microsoft 365 status page',
-      lastKnownSeverity: svcLastKnown ? svcLastKnown.severity : null,
-      lastSuccessfulParse: data.lastSuccessfulParse,
-      firstFailedAt: data.parseError.firstFailedAt,
-      errorMessage: data.parseError.message,
-      updatedAt: data.fetchedAt
-    });
-  }
-
-  // Pull this tile's specific service entry from the shared snapshot. If the
-  // entry is missing (workflow ran but somehow didn't emit our serviceKey),
-  // surface as breakage rather than silently defaulting to operational —
-  // a green tile we can't trust is worse than an honest "check this."
-  const svc = data.services && data.services[vendor.serviceKey];
-  if (!svc) {
-    return buildBreakageResult({
-      vendorPageLabel: 'Microsoft 365 status page',
-      lastKnownSeverity: null,
-      lastSuccessfulParse: data.lastSuccessfulParse,
-      firstFailedAt: null,
-      errorMessage: 'Service "' + vendor.serviceKey + '" missing from snapshot — workflow may have a config drift',
-      updatedAt: data.fetchedAt
-    });
-  }
-
-  const severity = svc.severity || 'operational';
-  let statusText;
-  let incident = null;
-
-  switch (severity) {
-    case 'operational':
-      statusText = 'Available';
-      break;
-    case 'degraded':
-      statusText = svc.status || 'Advisory';
-      incident = {
-        name: svc.title || 'Microsoft is reporting an advisory',
-        status: svc.status || 'Advisory',
-        updatedAt: svc.pubDate ? safeParseDate(svc.pubDate) : null
-      };
-      break;
-    case 'partial':
-      statusText = svc.status || 'Service degradation';
-      incident = {
-        name: svc.title || 'Microsoft is reporting a service issue',
-        status: svc.status || 'Service degradation',
-        updatedAt: svc.pubDate ? safeParseDate(svc.pubDate) : null
-      };
-      break;
-    case 'major':
-      statusText = svc.status || 'Service interruption';
-      incident = {
-        name: svc.title || 'Microsoft is reporting a service interruption',
-        status: svc.status || 'Service interruption',
-        updatedAt: svc.pubDate ? safeParseDate(svc.pubDate) : null
-      };
-      break;
-    default:
-      statusText = 'Status unknown — see vendor page';
-  }
-
-  return {
-    severity,
-    statusText,
-    incident,
-    updatedAt: data.fetchedAt || new Date().toISOString()
-  };
-}
-
-// Defensive date parser for Microsoft pubDate. RSS pubDate is usually RFC-822
-// ("Wed, 22 Apr 2026 18:26:00 Z") but we don't want a malformed date to crash
-// the tile render, so wrap it.
-function safeParseDate(dateStr) {
-  try {
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? null : d.toISOString();
-  } catch (_) {
-    return null;
-  }
-}
 
 // ExploreLearning snapshot file:
 //   Written by the .github/workflows/fetch-explorelearning.yml workflow every 5 minutes.
@@ -2224,12 +2064,7 @@ function renderPlainBanner(results) {
 
     // Detail: cascade clarification + correlation hint if any
     let detailParts = [];
-    const entraDown = criticalAffected.some(v => v.id === 'm365_entra');
-    if (entraDown) {
-      detailParts.push('Microsoft sign-in is down — most other tools won\'t work either until this is restored.');
-    } else {
-      detailParts.push('Teaching may be affected for anything that uses ' + namesHtml(criticalAffected) + '.');
-    }
+    detailParts.push('Teaching may be affected for anything that uses ' + namesHtml(criticalAffected) + '.');
     if (correlations.length > 0) {
       const infraNames = [...new Set(correlations.flatMap(c => c.infraNames))];
       detailParts.push('Possible upstream cause: ' + infraNames.join(', ') + '.');
@@ -2367,9 +2202,15 @@ function renderAll(results) {
     return a.name.localeCompare(b.name);
   };
 
-  // Discover all task buckets present in VENDORS (avoids a hardcoded list
-  // that could drift from the markup or vendor config).
-  const tasks = [...new Set(VENDORS.map(v => v.task).filter(Boolean))];
+  // Discover all task buckets — union of (a) tasks present in VENDORS and
+  // (b) taskGrid-* elements present in the markup. Including the markup side
+  // matters when a section's only vendors have been removed: without the DOM
+  // sweep, the loop would never visit that grid and it would render as a
+  // visible-but-empty section instead of being hidden by .is-empty.
+  const vendorTasks = VENDORS.map(v => v.task).filter(Boolean);
+  const domTasks = [...document.querySelectorAll('[id^="taskGrid-"]')]
+    .map(el => el.id.replace(/^taskGrid-/, ''));
+  const tasks = [...new Set([...vendorTasks, ...domTasks])];
 
   for (const task of tasks) {
     const grid = document.getElementById('taskGrid-' + task);
@@ -2469,7 +2310,6 @@ async function fetchVendor(vendor) {
   switch (vendor.type) {
     case 'statuspage':       return fetchStatuspage(vendor);
     case 'instatus':         return fetchInstatus(vendor);
-    case 'm365service':      return fetchM365Service(vendor);
     case 'elsnapshot':       return fetchExploreLearning(vendor);
     case 'ixlsnapshot':      return fetchIXL(vendor);
     case 'quizizzsnapshot':  return fetchQuizizz(vendor);
@@ -2485,12 +2325,6 @@ async function refreshAll() {
   const btn = document.getElementById('refreshBtn');
   const lastEl = document.getElementById('lastChecked');
   btn.disabled = true;
-
-  // Clear the M365 per-refresh snapshot cache so the four M365 tiles re-fetch
-  // m365.json once this cycle (instead of using last cycle's data). Inside this
-  // single cycle, the cache will hold the JSON so we only fetch once total
-  // even though four tiles consume it.
-  clearM365Cache();
 
   const cache = loadCache();
   const results = {};
