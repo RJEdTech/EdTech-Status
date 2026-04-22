@@ -1,5 +1,22 @@
 {
-  "_comment": "Populated automatically by .github/workflows/alert-changes.yml. First workflow run after deployment writes the baseline and sends no alerts.",
-  "checkedAt": null,
-  "vendors": null
+  "checkedAt": "2026-04-22T22:59:42.041Z",
+  "vendors": {
+    "instructure": "operational",
+    "blackbaud": "operational",
+    "vivi": "operational",
+    "flint": "operational",
+    "respondus": "operational",
+    "aspiredu": "operational",
+    "kahoot": "operational",
+    "deltamath": "operational",
+    "cloudflare": "degraded",
+    "copyleaks": "operational",
+    "aws": "operational",
+    "explorelearning": "unknown",
+    "ixl": "operational",
+    "quizizz": "operational",
+    "gimkit": "operational",
+    "soundtrap": "unknown",
+    "noredink": "operational"
+  }
 }
