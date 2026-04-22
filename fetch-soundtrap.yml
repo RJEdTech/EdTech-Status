@@ -1,0 +1,164 @@
+name: Fetch Soundtrap status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-soundtrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and parse Soundtrap status page
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          // Soundtrap's status page is the most minimal possible: a single sentence
+          // ("Soundtrap is working fine.") on an otherwise bare HTML page. There is
+          // no API, no structured data, no component breakdown, no incident log —
+          // only that one line of text. So this scraper is a binary check: did we
+          // find the "working fine" string on a page that's recognizably theirs?
+          //
+          // Because the page exposes only one bit of state, we can detect "operational"
+          // and "not operational" but cannot distinguish degraded / partial / major.
+          // Anything that isn't the operational string surfaces as "see vendor page."
+          const PAGE_URL = 'https://status.soundtrap.com/';
+          const OUT_PATH = 'soundtrap.json';
+
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
+                  return;
+                }
+                let body = '';
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
+            });
+          }
+
+          // Detection logic:
+          //   - Confirm we're on the right page by looking for "Soundtrap" in the title
+          //     or H1. This guards against accidentally hitting a redirect to a marketing
+          //     page that happens not to mention status.
+          //   - Then check for the literal "Soundtrap is working fine." string. Present →
+          //     operational. Absent (but page is still recognizably Soundtrap's status) →
+          //     "issue reported," click through to verify.
+          //   - Neither marker → throw, treat as breakage.
+          function detectStatus(html) {
+            const looksLikeSoundtrapStatus = /Soundtrap system status/i.test(html)
+                                            || /<title>[^<]*Soundtrap[^<]*<\/title>/i.test(html);
+            if (!looksLikeSoundtrapStatus) {
+              throw new Error('Page does not look like the Soundtrap status page — Soundtrap may have moved or redesigned the page.');
+            }
+
+            if (/Soundtrap is working fine/i.test(html)) {
+              return 'operational';
+            }
+
+            // Page is recognizably Soundtrap's status page but the operational string
+            // is gone. Best guess is they're reporting an issue. We can't distinguish
+            // severity, so use 'partial' — visible enough to draw attention without
+            // overstating. Teachers click through for details.
+            return 'check_page';
+          }
+
+          (async () => {
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'status', 'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
+            try {
+              const html = await fetchUrl(PAGE_URL);
+              const status = detectStatus(html);
+
+              const now = new Date().toISOString();
+              const newContent = {
+                source: PAGE_URL,
+                status: status,
+                parseError: null,
+                lastSuccessfulParse: now
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('No content change — skipping write. Current status:', status);
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            } catch (err) {
+              console.error('Failed to fetch/parse Soundtrap status page:', err.message);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: PAGE_URL,
+                status: lastGood.status || 'unknown',
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add soundtrap.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update Soundtrap status snapshot [skip ci]"
+            git push
+          fi
+
+      - name: Fail run if scraper is broken
+        run: |
+          if [ -f soundtrap.json ] && grep -q '"parseError": {' soundtrap.json; then
+            echo "::error::Soundtrap scraper failed to recognize the page. See soundtrap.json for details."
+            cat soundtrap.json
+            exit 1
+          fi
+          echo "Soundtrap scraper succeeded."

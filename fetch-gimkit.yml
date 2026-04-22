@@ -1,0 +1,164 @@
+name: Fetch Gimkit status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-gimkit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and parse Gimkit Crisp Status page
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          // Gimkit's status page is hosted on Crisp Status (the open-source Vigil
+          // tool, sold by Crisp as a SaaS product). Crisp Status does not expose
+          // a public unauthenticated JSON endpoint for status pages — the v1 REST
+          // API is for managing the page from the operator's side, not for reading
+          // public status — so we have to scrape the rendered HTML.
+          const PAGE_URL = 'https://gimkit.crisp.watch/en/';
+          const OUT_PATH = 'gimkit.json';
+
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
+                  return;
+                }
+                let body = '';
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
+            });
+          }
+
+          // Detection logic: Crisp Status renders a top-level banner whose wording
+          // depends on overall replica health. Vigil (the underlying engine) classifies
+          // each replica as "healthy", "sick", or "dead", and rolls them up to a
+          // page-level status. The default headline texts are:
+          //
+          //   "All systems are healthy at the moment."   — operational
+          //   "Some systems are not behaving normally."  — at least one node sick
+          //   "Some systems are down right now."         — at least one node dead
+          //
+          // We also confirm we're on a Crisp-style status page by checking for either
+          // "Crisp" or the standard description text "This status page automatically
+          // monitors our systems" — if neither is present, the page changed and we
+          // shouldn't trust the result.
+          function detectStatus(html) {
+            const looksLikeCrispStatus = /This status page automatically monitors/i.test(html)
+                                        || /crisp\.watch/i.test(html)
+                                        || /Powered by Crisp/i.test(html);
+            if (!looksLikeCrispStatus) {
+              throw new Error('Page does not appear to be a Crisp Status page — Crisp may have redesigned the page or Gimkit may have moved their status page.');
+            }
+
+            // Order matters — check most-degraded first.
+            if (/All systems are down/i.test(html))                     return 'major';
+            if (/Some systems are down/i.test(html))                    return 'partial';
+            if (/Some systems are not behaving normally/i.test(html))   return 'degraded';
+            if (/All systems are healthy/i.test(html))                  return 'operational';
+
+            throw new Error('Page loaded but no known Crisp Status banner found — wording may have changed.');
+          }
+
+          (async () => {
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'severity', 'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
+            try {
+              const html = await fetchUrl(PAGE_URL);
+              const severity = detectStatus(html);
+
+              const now = new Date().toISOString();
+              const newContent = {
+                source: PAGE_URL,
+                severity: severity,
+                parseError: null,
+                lastSuccessfulParse: now
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('No content change — skipping write. Current severity:', severity);
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            } catch (err) {
+              console.error('Failed to fetch/parse Gimkit status page:', err.message);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: PAGE_URL,
+                severity: lastGood.severity || 'unknown',
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gimkit.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update Gimkit status snapshot [skip ci]"
+            git push
+          fi
+
+      - name: Fail run if scraper is broken
+        run: |
+          if [ -f gimkit.json ] && grep -q '"parseError": {' gimkit.json; then
+            echo "::error::Gimkit scraper failed to recognize the page. See gimkit.json for details."
+            cat gimkit.json
+            exit 1
+          fi
+          echo "Gimkit scraper succeeded."

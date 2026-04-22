@@ -385,6 +385,32 @@ const VENDORS = [
     summaryUrl: 'https://status.vivi.io/api/v2/summary.json',
     pageUrl: 'https://status.vivi.io/'
   },
+  {
+    id: 'kahoot',
+    name: 'Kahoot',
+    sub: 'Game-based learning platform',
+    type: 'statuspage',
+    apiUrl: 'https://status.kahoot.com/api/v2/status.json',
+    summaryUrl: 'https://status.kahoot.com/api/v2/summary.json',
+    pageUrl: 'https://status.kahoot.com/'
+  },
+  {
+    // Blackbaud's status page rolls up dozens of components across many products
+    // (RE NXT, FE NXT, Luminate, YourCause, etc). The top-level indicator fires
+    // when ANY of them is degraded — which is fine for our purposes since we want
+    // visibility on Education Management (SIS, LMS, Enrollment, Billing, School
+    // Website), Tuition Management, the financial tools, AND the foundational
+    // Blackbaud.com / sign-in / Blackbaud ID layer that affects login regardless.
+    // If we ever want to scope down to specific components, switch to summary.json
+    // and filter by component group ID.
+    id: 'blackbaud',
+    name: 'Blackbaud',
+    sub: 'SIS, LMS, EMS, financials, ID',
+    type: 'statuspage',
+    apiUrl: 'https://status.blackbaud.com/api/v2/status.json',
+    summaryUrl: 'https://status.blackbaud.com/api/v2/summary.json',
+    pageUrl: 'https://status.blackbaud.com/'
+  },
 
   // --- Instatus (summary.json) ---
   {
@@ -449,6 +475,38 @@ const VENDORS = [
     type: 'ixlsnapshot',
     apiUrl: 'ixl.json',
     pageUrl: 'https://status.ixl.com/'
+  },
+  // Quizizz / Wayground (status page hosted on Freshping, no public unauthenticated
+  // JSON endpoint, so we scrape the rendered banner via GitHub Actions to quizizz.json)
+  // Note: Quizizz has been rebranded to "Wayground" but everyone still calls it Quizizz,
+  // so we label it Quizizz with a sub-line noting the rebrand.
+  {
+    id: 'quizizz',
+    name: 'Quizizz',
+    sub: 'Now branded "Wayground"',
+    type: 'quizizzsnapshot',
+    apiUrl: 'quizizz.json',
+    pageUrl: 'https://statuspage.freshping.io/621-QuizizzStatusPage/'
+  },
+  // Gimkit (status page hosted on Crisp Status, no public unauthenticated JSON
+  // endpoint, so we scrape the rendered banner via GitHub Actions to gimkit.json)
+  {
+    id: 'gimkit',
+    name: 'Gimkit',
+    sub: 'Game-based learning & 2D modes',
+    type: 'gimkitsnapshot',
+    apiUrl: 'gimkit.json',
+    pageUrl: 'https://gimkit.crisp.watch/en/'
+  },
+  // Soundtrap (bare HTML status page with a single sentence — only one bit of state
+  // available, so we can detect operational vs not-operational but no severity nuance)
+  {
+    id: 'soundtrap',
+    name: 'Soundtrap',
+    sub: 'Music creation & podcasting',
+    type: 'soundtrapsnapshot',
+    apiUrl: 'soundtrap.json',
+    pageUrl: 'https://status.soundtrap.com/'
   }
 ];
 
@@ -826,6 +884,199 @@ async function fetchIXL(vendor) {
   };
 }
 
+// Quizizz / Wayground snapshot file:
+//   Written by the .github/workflows/fetch-quizizz.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//   Quizizz's status page is hosted on Freshping, which has no public unauthenticated
+//   JSON endpoint. The workflow scrapes the rendered banner and maps to one of:
+//     'operational' | 'partial' | 'major' | 'maintenance'
+//   The workflow does the severity mapping itself; this function just renders.
+async function fetchQuizizz(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'Quizizz status page',
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  // Map workflow severity to dashboard severity. The workflow uses 'maintenance'
+  // as a distinct state; we render that as 'degraded' (yellow) per existing
+  // convention (see mapStatuspageIndicator → maintenance returns 'degraded').
+  const rawSeverity = data.severity || 'operational';
+  const severity = rawSeverity === 'maintenance' ? 'degraded' : rawSeverity;
+
+  let statusText;
+  let incident = null;
+
+  switch (severity) {
+    case 'operational':
+      statusText = 'All systems operational';
+      break;
+    case 'degraded':
+      statusText = 'Maintenance in progress';
+      incident = {
+        name: 'Quizizz is in scheduled maintenance',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    case 'partial':
+      statusText = 'Some systems are down';
+      incident = {
+        name: 'Quizizz is reporting an issue',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    case 'major':
+      statusText = 'All systems are down';
+      incident = {
+        name: 'Critical issue affecting Quizizz',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    default:
+      statusText = 'Status unknown — see vendor page';
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
+// Gimkit snapshot file:
+//   Written by the .github/workflows/fetch-gimkit.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//   Gimkit's status page is hosted on Crisp Status, which has no public
+//   unauthenticated JSON endpoint. The workflow scrapes the rendered banner and
+//   maps Crisp's healthy/sick/dead replica states to one of:
+//     'operational' | 'degraded' | 'partial' | 'major'
+async function fetchGimkit(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'Gimkit status page',
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  const severity = data.severity || 'operational';
+  let statusText;
+  let incident = null;
+
+  switch (severity) {
+    case 'operational':
+      statusText = 'All systems healthy';
+      break;
+    case 'degraded':
+      statusText = 'Some systems not behaving normally';
+      incident = {
+        name: 'One or more Gimkit nodes reporting as sick',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    case 'partial':
+      statusText = 'Some systems are down';
+      incident = {
+        name: 'Gimkit is reporting an issue',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    case 'major':
+      statusText = 'All systems are down';
+      incident = {
+        name: 'Critical issue affecting Gimkit',
+        status: 'See vendor status page',
+        updatedAt: null
+      };
+      break;
+    default:
+      statusText = 'Status unknown — see vendor page';
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
+// Soundtrap snapshot file:
+//   Written by the .github/workflows/fetch-soundtrap.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//   Soundtrap's status page is the most minimal possible: a single sentence on
+//   an otherwise bare HTML page. Only one bit of state is exposed:
+//     'operational' = the "Soundtrap is working fine" string was present
+//     'check_page'  = page loaded but the operational string was absent
+//   We deliberately don't try to parse incident details (none exist on the page
+//   to parse). Teachers click through if anything other than operational.
+async function fetchSoundtrap(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'Soundtrap status page',
+      lastKnownSeverity: data.status === 'operational' ? 'operational' :
+                         data.status === 'check_page' ? 'partial' : null,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  const status = (data.status || '').trim();
+  const isOperational = status === 'operational';
+
+  let severity = 'operational';
+  let statusText = 'Soundtrap is working fine';
+  let incident = null;
+
+  if (!isOperational) {
+    // We can't tell major vs partial without parsing the page in more depth, and
+    // there's nothing more to parse — Soundtrap's page only reports one bit of
+    // state. Mark as 'partial' to draw attention without overstating.
+    severity = 'partial';
+    statusText = 'Issue may be reported — see vendor page';
+    incident = {
+      name: 'Soundtrap operational marker missing',
+      status: 'See vendor status page',
+      updatedAt: null
+    };
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
 //=============================================================================
 // CACHING
 //=============================================================================
@@ -1095,11 +1346,14 @@ function renderAll(results) {
 //=============================================================================
 async function fetchVendor(vendor) {
   switch (vendor.type) {
-    case 'statuspage':    return fetchStatuspage(vendor);
-    case 'instatus':      return fetchInstatus(vendor);
-    case 'm365snapshot':  return fetchM365(vendor);
-    case 'elsnapshot':    return fetchExploreLearning(vendor);
-    case 'ixlsnapshot':   return fetchIXL(vendor);
+    case 'statuspage':       return fetchStatuspage(vendor);
+    case 'instatus':         return fetchInstatus(vendor);
+    case 'm365snapshot':     return fetchM365(vendor);
+    case 'elsnapshot':       return fetchExploreLearning(vendor);
+    case 'ixlsnapshot':      return fetchIXL(vendor);
+    case 'quizizzsnapshot':  return fetchQuizizz(vendor);
+    case 'gimkitsnapshot':   return fetchGimkit(vendor);
+    case 'soundtrapsnapshot': return fetchSoundtrap(vendor);
     default: throw new Error('Unknown vendor type: ' + vendor.type);
   }
 }
