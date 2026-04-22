@@ -1,0 +1,335 @@
+name: Alert on status changes
+
+# Runs every 10 minutes. Compares each monitored vendor's current status against
+# the last-known state in state/last-status.json. When a vendor changes state
+# (operational <-> degraded/partial/major, or breakage), posts a single
+# consolidated message to a Teams channel via incoming webhook.
+#
+# Vendor list mirrors index.html's VENDORS array. Direct API fetches for vendors
+# with public JSON (statuspage, instatus). For vendors served by snapshot files
+# already maintained by other workflows in this repo (IXL, Quizizz, Gimkit,
+# Soundtrap, NoRedInk, ExploreLearning, AWS), we read the JSON files directly.
+# Microsoft 365 is link-only and skipped.
+#
+# First run after deployment writes state and sends no alerts (no baseline to
+# compare against). Subsequent runs only post when something actually changed.
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 10-20 minutes — fine for this purpose.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:  # allow manual trigger from the Actions tab
+
+permissions:
+  contents: write  # needed to commit updated state file
+
+jobs:
+  check-and-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check vendor statuses and alert on changes
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const https = require('https');
+
+          // ---------- Vendor configuration ----------
+          // Mirrors index.html's VENDORS array. Each entry knows how to derive
+          // its severity. `tier` controls alert priority and infra-suppression.
+          const VENDORS = [
+            // statuspage (Atlassian)
+            { id: 'instructure', name: 'Canvas', tier: 'critical',
+              kind: 'statuspage', url: 'https://status.instructure.com/api/v2/status.json' },
+            { id: 'blackbaud', name: 'Blackbaud', tier: 'core',
+              kind: 'statuspage', url: 'https://status.blackbaud.com/api/v2/status.json' },
+            { id: 'vivi', name: 'Vivi', tier: 'core',
+              kind: 'statuspage', url: 'https://status.vivi.io/api/v2/status.json' },
+            { id: 'flint', name: 'Flint', tier: 'core',
+              kind: 'statuspage', url: 'https://status.flintk12.com/api/v2/status.json' },
+            { id: 'respondus', name: 'LockDown Browser', tier: 'secondary',
+              kind: 'statuspage', url: 'https://status.respondus.com/api/v2/status.json' },
+            { id: 'aspiredu', name: 'Grade Guardian', tier: 'secondary',
+              kind: 'statuspage', url: 'https://aspiredu.statuspage.io/api/v2/status.json' },
+            { id: 'kahoot', name: 'Kahoot', tier: 'secondary',
+              kind: 'statuspage', url: 'https://status.kahoot.com/api/v2/status.json' },
+            { id: 'deltamath', name: 'DeltaMath', tier: 'secondary',
+              kind: 'statuspage', url: 'https://status.deltamath.com/api/v2/status.json' },
+            { id: 'cloudflare', name: 'Cloudflare', tier: 'infra',
+              kind: 'statuspage', url: 'https://www.cloudflarestatus.com/api/v2/status.json' },
+
+            // instatus
+            { id: 'copyleaks', name: 'Copyleaks', tier: 'secondary',
+              kind: 'instatus', url: 'https://status.copyleaks.com/summary.json' },
+
+            // snapshot files (maintained by other workflows in this repo)
+            { id: 'aws', name: 'AWS', tier: 'infra',
+              kind: 'snapshot', file: 'aws.json' },
+            { id: 'explorelearning', name: 'Gizmos', tier: 'secondary',
+              kind: 'snapshot', file: 'explorelearning.json' },
+            { id: 'ixl', name: 'IXL', tier: 'secondary',
+              kind: 'snapshot', file: 'ixl.json' },
+            { id: 'quizizz', name: 'Quizizz', tier: 'secondary',
+              kind: 'snapshot', file: 'quizizz.json' },
+            { id: 'gimkit', name: 'Gimkit', tier: 'secondary',
+              kind: 'snapshot', file: 'gimkit.json' },
+            { id: 'soundtrap', name: 'Soundtrap', tier: 'secondary',
+              kind: 'snapshot', file: 'soundtrap.json' },
+            { id: 'noredink', name: 'NoRedInk', tier: 'secondary',
+              kind: 'snapshot', file: 'noredink.json' },
+          ];
+
+          // Infra → dependent service map. Used to suppress infra-only alerts
+          // unless a dependent is also red. Mirrors INFRA_DEPENDENCIES in
+          // index.html so behavior is consistent.
+          const INFRA_DEPENDENTS = {
+            cloudflare: ['instructure', 'noredink', 'quizizz', 'aspiredu'],
+            aws: ['instructure', 'noredink', 'quizizz', 'gimkit'],
+          };
+
+          const STATE_PATH = 'state/last-status.json';
+          const SEVERITY_RANK = { operational: 0, degraded: 1, partial: 2, major: 3, breakage: 4, unknown: -1 };
+
+          // ---------- HTTP helper ----------
+          function fetchJson(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'rj-edtech-status-alerter' } }, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+                  return;
+                }
+                let body = '';
+                res.on('data', (c) => body += c);
+                res.on('end', () => {
+                  try { resolve(JSON.parse(body)); }
+                  catch (e) { reject(new Error(`JSON parse failed for ${url}: ${e.message}`)); }
+                });
+              }).on('error', reject);
+            });
+          }
+
+          function postJson(url, payload) {
+            return new Promise((resolve, reject) => {
+              const data = JSON.stringify(payload);
+              const u = new URL(url);
+              const req = https.request({
+                hostname: u.hostname,
+                path: u.pathname + u.search,
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Content-Length': Buffer.byteLength(data),
+                },
+              }, (res) => {
+                let body = '';
+                res.on('data', (c) => body += c);
+                res.on('end', () => {
+                  if (res.statusCode >= 200 && res.statusCode < 300) resolve(body);
+                  else reject(new Error(`Teams webhook returned HTTP ${res.statusCode}: ${body}`));
+                });
+              });
+              req.on('error', reject);
+              req.write(data);
+              req.end();
+            });
+          }
+
+          // ---------- Severity derivation per vendor kind ----------
+          // Atlassian Statuspage indicator field: none | minor | major | critical
+          function statuspageSeverity(data) {
+            const ind = data?.status?.indicator;
+            switch (ind) {
+              case 'none':     return 'operational';
+              case 'minor':    return 'degraded';
+              case 'major':    return 'partial';
+              case 'critical': return 'major';
+              default:         return 'unknown';
+            }
+          }
+
+          // Instatus summary endpoint: page.status field
+          function instatusSeverity(data) {
+            const s = (data?.page?.status || '').toUpperCase();
+            switch (s) {
+              case 'UP':                return 'operational';
+              case 'HASISSUES':         return 'partial';
+              case 'UNDERMAINTENANCE':  return 'degraded';
+              case 'MINOROUTAGE':       return 'degraded';
+              default:                  return 'unknown';
+            }
+          }
+
+          // Snapshot files share a `severity` field per our other workflows
+          function snapshotSeverity(data) {
+            if (data?.parseError) return 'breakage';
+            return data?.severity || 'unknown';
+          }
+
+          // ---------- Fetch one vendor ----------
+          async function getCurrentSeverity(vendor) {
+            try {
+              if (vendor.kind === 'statuspage') {
+                const data = await fetchJson(vendor.url);
+                return statuspageSeverity(data);
+              }
+              if (vendor.kind === 'instatus') {
+                const data = await fetchJson(vendor.url);
+                return instatusSeverity(data);
+              }
+              if (vendor.kind === 'snapshot') {
+                if (!fs.existsSync(vendor.file)) return 'unknown';
+                const data = JSON.parse(fs.readFileSync(vendor.file, 'utf8'));
+                return snapshotSeverity(data);
+              }
+              return 'unknown';
+            } catch (e) {
+              console.log(`[${vendor.id}] fetch failed: ${e.message}`);
+              return 'breakage';
+            }
+          }
+
+          // ---------- Main ----------
+          (async () => {
+            const webhook = process.env.TEAMS_WEBHOOK_URL;
+            if (!webhook) {
+              console.log('TEAMS_WEBHOOK_URL not set — exiting without checking.');
+              process.exit(0);
+            }
+
+            // Load prior state (or null if first run)
+            let lastState = null;
+            if (fs.existsSync(STATE_PATH)) {
+              try { lastState = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')); }
+              catch (e) { console.log('Could not parse last-status.json, treating as first run.'); }
+            }
+            const isFirstRun = !lastState || !lastState.vendors;
+
+            // Fetch all current statuses in parallel
+            const results = await Promise.all(
+              VENDORS.map(async (v) => ({ vendor: v, severity: await getCurrentSeverity(v) }))
+            );
+
+            // Build current state
+            const currentState = {
+              checkedAt: new Date().toISOString(),
+              vendors: {},
+            };
+            for (const { vendor, severity } of results) {
+              currentState.vendors[vendor.id] = severity;
+            }
+
+            // Detect changes (skip on first run)
+            const changes = [];
+            if (!isFirstRun) {
+              for (const { vendor, severity } of results) {
+                const previous = lastState.vendors[vendor.id];
+                if (previous === undefined) continue;  // new vendor — skip
+                if (previous === severity) continue;
+                if (severity === 'unknown') continue;  // don't alert on transient unknowns
+
+                changes.push({
+                  vendor,
+                  from: previous,
+                  to: severity,
+                });
+              }
+            }
+
+            // Filter: infra-only changes suppressed unless a dependent is also red
+            const isRed = (sev) => ['degraded', 'partial', 'major', 'breakage'].includes(sev);
+            const filteredChanges = changes.filter((c) => {
+              if (c.vendor.tier !== 'infra') return true;
+              const dependents = INFRA_DEPENDENTS[c.vendor.id] || [];
+              const anyDependentRed = dependents.some((depId) => isRed(currentState.vendors[depId]));
+              if (!anyDependentRed) {
+                console.log(`Suppressing infra-only change: ${c.vendor.name} (no dependents red)`);
+                return false;
+              }
+              return true;
+            });
+
+            // Always write state — even if no alert went out, we want next run's diff to be accurate
+            fs.mkdirSync('state', { recursive: true });
+            fs.writeFileSync(STATE_PATH, JSON.stringify(currentState, null, 2) + '\n');
+
+            if (isFirstRun) {
+              console.log(`First run — wrote baseline for ${VENDORS.length} vendors. No alerts sent.`);
+              process.exit(0);
+            }
+
+            if (filteredChanges.length === 0) {
+              console.log('No actionable status changes.');
+              process.exit(0);
+            }
+
+            // Build Teams message
+            const tierOrder = { critical: 0, core: 1, secondary: 2, infra: 3 };
+            filteredChanges.sort((a, b) => tierOrder[a.vendor.tier] - tierOrder[b.vendor.tier]);
+
+            const sevLabel = {
+              operational: 'Operational',
+              degraded: 'Degraded',
+              partial: 'Partial outage',
+              major: 'Major outage',
+              breakage: 'Status check broken',
+            };
+            const sevEmoji = {
+              operational: '✅',
+              degraded: '🟡',
+              partial: '🟠',
+              major: '🔴',
+              breakage: '🔧',
+            };
+
+            const lines = filteredChanges.map((c) => {
+              const arrow = (c.to === 'operational') ? '↩' : '↗';
+              return `${sevEmoji[c.to] || '•'} **${c.vendor.name}** ${arrow} ${sevLabel[c.to] || c.to} _(was ${sevLabel[c.from] || c.from})_`;
+            });
+
+            const headline = filteredChanges.length === 1
+              ? `${filteredChanges[0].vendor.name}: ${sevLabel[filteredChanges[0].to] || filteredChanges[0].to}`
+              : `${filteredChanges.length} status changes`;
+
+            const payload = {
+              type: 'message',
+              attachments: [{
+                contentType: 'application/vnd.microsoft.card.adaptive',
+                content: {
+                  type: 'AdaptiveCard',
+                  $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+                  version: '1.4',
+                  body: [
+                    { type: 'TextBlock', size: 'Medium', weight: 'Bolder', text: headline },
+                    { type: 'TextBlock', text: lines.join('\n\n'), wrap: true },
+                    {
+                      type: 'TextBlock', isSubtle: true, size: 'Small', spacing: 'Medium',
+                      text: `Checked ${currentState.checkedAt} · [Open dashboard](https://rjedtech.github.io/EdTech-Status/)`,
+                    },
+                  ],
+                },
+              }],
+            };
+
+            await postJson(webhook, payload);
+            console.log(`Posted ${filteredChanges.length} change(s) to Teams.`);
+          })().catch((e) => {
+            console.error('Workflow failed:', e);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Commit state if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/last-status.json
+          if git diff --staged --quiet; then
+            echo "No state changes to commit."
+          else
+            git commit -m "Update last-status.json [skip ci]"
+            git push
+          fi
