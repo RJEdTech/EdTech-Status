@@ -317,7 +317,7 @@
 
   <footer class="page-foot">
     <p><strong>About this dashboard.</strong> Status pages reflect what vendors choose to report and can lag actual outages by 30 minutes or more. Treat this as a first signal, not a definitive answer. If teachers report a problem and the tile is still green, the problem is real.</p>
-    <p style="margin-top: 10px;"><strong>Why some tiles are link-only.</strong> NoRedInk, DeltaMath, and AspirEDU are aggregated by StatusGator, which requires an account for API access. IXL and ExploreLearning don't expose machine-readable status. Click the tile to see the vendor's page.</p>
+    <p style="margin-top: 10px;"><strong>Why some tiles are link-only.</strong> NoRedInk and DeltaMath are aggregated by StatusGator, which requires an account for API access. IXL doesn't expose machine-readable status. Click the tile to see the vendor's page.</p>
     <p style="margin-top: 10px;">Built and maintained by Jason Beyer · RJEdTech</p>
   </footer>
 
@@ -387,6 +387,16 @@ const VENDORS = [
     pageUrl: 'https://status.cloud.microsoft/'
   },
 
+  // --- ExploreLearning (status page scraped via GitHub Actions to explorelearning.json at root) ---
+  {
+    id: 'explorelearning',
+    name: 'ExploreLearning',
+    sub: 'Gizmos, Reflex, Frax',
+    type: 'elsnapshot',
+    apiUrl: 'explorelearning.json',
+    pageUrl: 'https://www.explorelearning.com/our-products/site-status'
+  },
+
   // --- Link-only ---
   {
     id: 'noredink',
@@ -417,13 +427,6 @@ const VENDORS = [
     sub: 'Static status page',
     type: 'linkonly',
     pageUrl: 'https://status.ixl.com/'
-  },
-  {
-    id: 'explorelearning',
-    name: 'ExploreLearning',
-    sub: 'Gizmos, Reflex, Frax — static page',
-    type: 'linkonly',
-    pageUrl: 'https://www.explorelearning.com/our-products/site-status'
   }
 ];
 
@@ -577,6 +580,50 @@ async function fetchM365(vendor) {
 
   // Use the snapshot's own fetchedAt as our "updated" indicator so the user
   // can see how fresh the underlying data is, not just when the dashboard pulled it.
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
+// ExploreLearning snapshot file:
+//   Written by the .github/workflows/fetch-explorelearning.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//   ExploreLearning has no machine-readable status feed, so the workflow scrapes
+//   the public site-status page and looks for two specific markers:
+//     - id="site-status-a-ok"
+//     - <p class="... text-green ...">A-OK!
+//   When BOTH are present, status is "operational".
+//   Anything else (incident page layout, fetch error, page redesign) → "check_page".
+//   We deliberately don't try to parse incident details, since we don't have
+//   a confirmed example of the down-state HTML and guessing would be fragile.
+//   Teachers click through to the vendor page for incident specifics.
+async function fetchExploreLearning(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  const status = (data.status || '').trim();
+  const isOperational = status === 'operational';
+
+  let severity = 'operational';
+  let statusText = 'A-OK — all sites operational';
+  let incident = null;
+
+  if (!isOperational) {
+    // We can't tell major vs partial without parsing the incident page, so we
+    // mark as "partial" — visible enough to draw attention without overstating.
+    severity = 'partial';
+    statusText = 'Issue reported — see vendor page for details';
+    incident = {
+      name: 'ExploreLearning is reporting an issue',
+      status: 'See vendor status page',
+      updatedAt: null
+    };
+  }
+
   return {
     severity,
     statusText,
@@ -831,6 +878,7 @@ async function fetchVendor(vendor) {
     case 'statuspage':    return fetchStatuspage(vendor);
     case 'instatus':      return fetchInstatus(vendor);
     case 'm365snapshot':  return fetchM365(vendor);
+    case 'elsnapshot':    return fetchExploreLearning(vendor);
     default: throw new Error('Unknown vendor type: ' + vendor.type);
   }
 }

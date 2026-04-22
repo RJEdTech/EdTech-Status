@@ -1,0 +1,120 @@
+name: Fetch ExploreLearning status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-explorelearning:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and parse ExploreLearning status page
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          const PAGE_URL = 'https://www.explorelearning.com/our-products/site-status';
+          const OUT_PATH = 'explorelearning.json';
+
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
+                  return;
+                }
+                let body = '';
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
+            });
+          }
+
+          // Detection logic: ExploreLearning's page has two known states.
+          //
+          //   "A-OK" state (operational) — the page contains:
+          //     - an element with id="site-status-a-ok"
+          //     - the heading "A-OK!" inside <p class="h1 xbold mb-0 text-green">
+          //     - text: "All ExploreLearning sites are currently working with no issues."
+          //
+          //   Anything else — we don't try to parse incident details, because we
+          //   don't have a confirmed example of the down-state HTML and guessing
+          //   would be fragile. Tile shows "issue reported, see vendor page" and
+          //   the user clicks through.
+          //
+          // We require BOTH the id and the green-text marker so a partial page
+          // load or unrelated HTML change doesn't false-positive as operational.
+
+          function detectStatus(html) {
+            const hasOkId = /id=["']site-status-a-ok["']/i.test(html);
+            const hasGreenAOk = /class=["'][^"']*text-green[^"']*["'][^>]*>\s*A-OK!/i.test(html);
+            if (hasOkId && hasGreenAOk) return 'operational';
+            return 'check_page';
+          }
+
+          (async () => {
+            try {
+              const html = await fetchUrl(PAGE_URL);
+              const status = detectStatus(html);
+
+              // Content fields used for change detection. fetchedAt is tracked
+              // separately so it doesn't trigger a commit every 5 minutes when
+              // nothing has actually changed.
+              const content = {
+                source: PAGE_URL,
+                status: status
+              };
+
+              // Read existing file (if any) and compare content fields only
+              let existingContent = null;
+              if (fs.existsSync(OUT_PATH)) {
+                try {
+                  const existing = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+                  existingContent = {
+                    source: existing.source,
+                    status: existing.status
+                  };
+                } catch (_) { /* malformed, treat as no existing */ }
+              }
+
+              const contentChanged = JSON.stringify(content) !== JSON.stringify(existingContent);
+
+              if (contentChanged) {
+                const snapshot = {
+                  fetchedAt: new Date().toISOString(),
+                  ...content
+                };
+                fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+                console.log('Status content changed — wrote', OUT_PATH);
+                console.log(JSON.stringify(snapshot, null, 2));
+              } else {
+                console.log('No content change — skipping write. Current status:', status);
+              }
+            } catch (err) {
+              console.error('Failed to fetch/parse ExploreLearning status page:', err.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add explorelearning.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update ExploreLearning status snapshot [skip ci]"
+            git push
+          fi
