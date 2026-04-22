@@ -1,0 +1,173 @@
+name: Fetch Quizizz status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-quizizz:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and parse Quizizz/Wayground Freshping status page
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          // Quizizz uses Freshping (a Freshworks product) for their public status page.
+          // Note: as of 2025, Quizizz has been rebranded to "Wayground" — the page header
+          // now reads "Wayground Status Page" but it's the same product teachers know as
+          // Quizizz. We label the tile "Quizizz" since that's what teachers and students
+          // actually call it; the sub-label notes the new brand.
+          //
+          // Freshping's public status pages do NOT expose an unauthenticated JSON
+          // endpoint (verified — only their authenticated v1 API works that way), so
+          // we have to scrape the rendered HTML.
+          const PAGE_URL = 'https://statuspage.freshping.io/621-QuizizzStatusPage/';
+          const OUT_PATH = 'quizizz.json';
+
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
+                  return;
+                }
+                let body = '';
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
+            });
+          }
+
+          // Detection logic: Freshping renders a top-level status banner on the page.
+          // Known states observed:
+          //   "All systems operational"  — everything is up
+          //   "Some systems are down"    — at least one check is failing
+          //   "All systems are down"     — everything is failing
+          //   "Under maintenance"        — at least one check is in maintenance
+          //
+          // We also confirm we're on the right page by checking for the page identifier
+          // in the URL string ("621-QuizizzStatusPage") embedded somewhere in the HTML
+          // (it appears in the logo link href). If neither marker is present, we
+          // throw — we don't want to false-positive "operational" because the page
+          // didn't load right.
+          function detectStatus(html) {
+            const hasPageMarker = /621-QuizizzStatusPage/i.test(html);
+            if (!hasPageMarker) {
+              throw new Error('Page identifier "621-QuizizzStatusPage" not found in HTML — Freshping may have changed the page URL or layout.');
+            }
+
+            // Match each known state. Order matters — check the most-degraded first
+            // so e.g. "All systems are down" doesn't accidentally match "operational" code.
+            if (/All systems are down/i.test(html))            return 'major';
+            if (/Some systems are down/i.test(html))           return 'partial';
+            if (/Under maintenance/i.test(html))               return 'maintenance';
+            if (/All systems operational/i.test(html))         return 'operational';
+
+            // Page loaded (we found the page marker) but no known status banner. This
+            // could be a layout change or a state we haven't seen before. Surface as
+            // breakage rather than guessing.
+            throw new Error('Page loaded but no known status banner found — Freshping may have changed the wording or added a new state.');
+          }
+
+          (async () => {
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'severity', 'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
+            try {
+              const html = await fetchUrl(PAGE_URL);
+              const severity = detectStatus(html);
+
+              const now = new Date().toISOString();
+              const newContent = {
+                source: PAGE_URL,
+                severity: severity,
+                parseError: null,
+                lastSuccessfulParse: now
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('No content change — skipping write. Current severity:', severity);
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            } catch (err) {
+              console.error('Failed to fetch/parse Quizizz/Wayground status page:', err.message);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: PAGE_URL,
+                severity: lastGood.severity || 'unknown',
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add quizizz.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update Quizizz status snapshot [skip ci]"
+            git push
+          fi
+
+      - name: Fail run if scraper is broken
+        # This step exists so the GitHub Actions run shows red whenever the
+        # scraper can't recognize the page, even though we wrote the breakage state
+        # to JSON in a clean exit (so the commit step could run). The dashboard
+        # surfaces breakage from the JSON; this step exists for GitHub-side alerting.
+        run: |
+          if [ -f quizizz.json ] && grep -q '"parseError": {' quizizz.json; then
+            echo "::error::Quizizz scraper failed to recognize the page. See quizizz.json for details."
+            cat quizizz.json
+            exit 1
+          fi
+          echo "Quizizz scraper succeeded."
