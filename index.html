@@ -598,6 +598,65 @@
     color: var(--red);
   }
 
+  /* Click-to-expand interaction.
+     Tiles with whatItDoes/whenDown copy get .is-expandable, which adds the
+     pointer cursor and a subtle hint to the user-select behavior. The expand
+     panel itself is in the DOM but height-collapsed; toggling .is-expanded
+     reveals it. We use max-height + opacity for the transition rather than
+     display:none so the reveal feels smooth rather than snapping. */
+  .tile.is-expandable {
+    cursor: pointer;
+    user-select: none;
+  }
+  .tile.is-expandable:hover {
+    border-color: var(--ink-mute);
+  }
+  .tile.is-expandable .tile-link,
+  .tile.is-expandable .tile-link * {
+    cursor: pointer;
+    user-select: auto;
+  }
+
+  .tile-expand {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.2s ease, opacity 0.15s ease, margin-top 0.2s ease, padding-top 0.2s ease;
+    border-top: 1px solid transparent;
+    margin-top: 0;
+    padding-top: 0;
+  }
+  .tile.is-expanded .tile-expand {
+    max-height: 400px;
+    opacity: 1;
+    border-top-color: var(--border);
+    margin-top: 8px;
+    padding-top: 12px;
+  }
+  /* In compact mode we still want the expand to work — just push it visually
+     into the right place by giving the tile a small vertical gap when open. */
+  .tile.is-compact.is-expanded {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .tile.is-compact.is-expanded .status-row {
+    margin-left: 0;
+  }
+
+  .tile-expand-row {
+    font-size: 13px;
+    color: var(--ink-dim);
+    line-height: 1.5;
+  }
+  .tile-expand-row + .tile-expand-row {
+    margin-top: 6px;
+  }
+  .tile-expand-row strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
   /* ======================================================================
      FOOTER
      ====================================================================== */
@@ -667,6 +726,7 @@
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
           </button>
+          <button class="btn" id="copyLinkBtn" type="button" title="Copy dashboard link to share">⧉ Copy link</button>
           <button class="btn" id="refreshBtn" type="button">↻ Refresh now</button>
         </div>
         <div class="last-checked" id="lastChecked">Loading…</div>
@@ -794,8 +854,9 @@ const VENDORS = [
     sub: 'Sign-in, OneDrive/SharePoint, Outlook, Teams — manual check',
     tier: 'critical',
     type: 'linkonly',
-    pageUrl: 'https://status.cloud.microsoft/'
-  },
+    pageUrl: 'https://status.cloud.microsoft/',
+    whatItDoes: 'Microsoft\'s full suite — sign-in (Entra), email (Outlook), files (OneDrive/SharePoint), and Teams. Sign-in is the foundation everything else rides on.',
+    whenDown: 'Almost nothing works — Canvas SSO, email, file access, and Teams all fail until Microsoft restores service.'},
   {
     id: 'instructure',
     task: 'teach',
@@ -806,6 +867,8 @@ const VENDORS = [
     apiUrl: 'https://status.instructure.com/api/v2/status.json',
     summaryUrl: 'https://status.instructure.com/api/v2/summary.json',
     pageUrl: 'https://status.instructure.com/',
+    whatItDoes: 'Our learning management system — assignments, quizzes, grades, course content.',
+    whenDown: 'Teachers can\'t post or grade work; students can\'t submit. Discussion boards, SpeedGrader, and New Quizzes all stop.',
     extraLink: { label: 'RJ instance uptime', url: 'https://statushistory.instructure.com/rjhs.instructure.com' }
   },
 
@@ -830,6 +893,8 @@ const VENDORS = [
     apiUrl: 'https://status.blackbaud.com/api/v2/status.json',
     summaryUrl: 'https://status.blackbaud.com/api/v2/summary.json',
     pageUrl: 'https://status.blackbaud.com/',
+    whatItDoes: 'Our student information system — enrollment, schedules, GPA, family contacts. Syncs nightly to Canvas.',
+    whenDown: 'Sync to Canvas pauses, and admin tools for grades and rosters become unavailable. Day-to-day teaching is mostly unaffected unless an outage spans days.',
     extraLink: { label: 'Uptime history', url: 'https://status.blackbaud.com/uptime' }
   },
   {
@@ -842,6 +907,8 @@ const VENDORS = [
     apiUrl: 'https://status.vivi.io/api/v2/status.json',
     summaryUrl: 'https://status.vivi.io/api/v2/summary.json',
     pageUrl: 'https://status.vivi.io/',
+    whatItDoes: 'Wireless display in classrooms — mirrors a teacher\'s laptop or iPad to the room screen.',
+    whenDown: 'Teachers fall back to HDMI cables or in-room PCs. Annotation and screenshot features stop.',
     extraLink: { label: 'Uptime history', url: 'https://status.vivi.io/uptime' }
   },
   {
@@ -854,6 +921,8 @@ const VENDORS = [
     apiUrl: 'https://status.flintk12.com/api/v2/status.json',
     summaryUrl: 'https://status.flintk12.com/api/v2/summary.json',
     pageUrl: 'https://status.flintk12.com/',
+    whatItDoes: 'Our K-12 AI platform — Chats for teacher use, Activities for guided student-facing AI work.',
+    whenDown: 'Any in-progress student Activities pause; teachers can use other AI tools (Claude, ChatGPT) for their own work.',
     extraLink: { label: 'Uptime history', url: 'https://status.flintk12.com/uptime' }
   },
 
@@ -870,6 +939,8 @@ const VENDORS = [
     apiUrl: 'https://status.respondus.com/api/v2/status.json',
     summaryUrl: 'https://status.respondus.com/api/v2/summary.json',
     pageUrl: 'https://status.respondus.com/',
+    whatItDoes: 'Locks down the browser during exams to prevent cheating.',
+    whenDown: 'Exams that require LockDown either won\'t start or will let students out of the lock — most teachers reschedule or convert to paper.',
     extraLink: { label: 'Uptime history', url: 'https://status.respondus.com/uptime' }
   },
   {
@@ -880,8 +951,9 @@ const VENDORS = [
     tier: 'secondary',
     type: 'instatus',
     apiUrl: 'https://status.copyleaks.com/summary.json',
-    pageUrl: 'https://status.copyleaks.com/'
-  },
+    pageUrl: 'https://status.copyleaks.com/',
+    whatItDoes: 'AI detection and plagiarism scanning, integrated with Canvas SpeedGrader.',
+    whenDown: 'New submissions can\'t be scanned. Already-scanned reports remain viewable.'},
   {
     id: 'aspiredu',
     task: 'canvas',
@@ -891,8 +963,9 @@ const VENDORS = [
     type: 'statuspage',
     apiUrl: 'https://aspiredu.statuspage.io/api/v2/status.json',
     summaryUrl: 'https://aspiredu.statuspage.io/api/v2/summary.json',
-    pageUrl: 'https://aspiredu.statuspage.io/'
-  },
+    pageUrl: 'https://aspiredu.statuspage.io/',
+    whatItDoes: 'Pulls Canvas grade data into risk reports — flags students whose grades or engagement are sliding.',
+    whenDown: 'Reports stop refreshing, but past data is still viewable.'},
   {
     id: 'explorelearning',
     task: 'canvas',
@@ -901,8 +974,9 @@ const VENDORS = [
     tier: 'secondary',
     type: 'elsnapshot',
     apiUrl: 'explorelearning.json',
-    pageUrl: 'https://www.explorelearning.com/our-products/site-status'
-  },
+    pageUrl: 'https://www.explorelearning.com/our-products/site-status',
+    whatItDoes: 'Interactive simulations for science and math — used heavily in lab and concept-introduction lessons.',
+    whenDown: 'Sims won\'t load; teachers fall back to demos or alternate activities.'},
   // IXL (status.ixl.com is hosted on Uptime.com, which has no public unauthenticated
   // JSON endpoint, so we scrape the inline JS blob via GitHub Actions to ixl.json)
   {
@@ -913,8 +987,9 @@ const VENDORS = [
     tier: 'secondary',
     type: 'ixlsnapshot',
     apiUrl: 'ixl.json',
-    pageUrl: 'https://status.ixl.com/'
-  },
+    pageUrl: 'https://status.ixl.com/',
+    whatItDoes: 'Adaptive practice across math, ELA, science, and social studies. Auto-assigns based on student performance.',
+    whenDown: 'Students can\'t complete assigned practice; previously earned progress is preserved.'},
   {
     id: 'kahoot',
     task: 'other',
@@ -924,8 +999,9 @@ const VENDORS = [
     type: 'statuspage',
     apiUrl: 'https://status.kahoot.com/api/v2/status.json',
     summaryUrl: 'https://status.kahoot.com/api/v2/summary.json',
-    pageUrl: 'https://status.kahoot.com/'
-  },
+    pageUrl: 'https://status.kahoot.com/',
+    whatItDoes: 'Live game-based review and quizzing — students join from devices.',
+    whenDown: 'Live games can\'t start; teachers usually pivot to a different review activity.'},
   // Quizizz / Wayground (status page hosted on Freshping, no public unauthenticated
   // JSON endpoint, so we scrape the rendered banner via GitHub Actions to quizizz.json).
   // Note: Quizizz has been rebranded to "Wayground" but everyone still calls it Quizizz,
@@ -938,8 +1014,9 @@ const VENDORS = [
     tier: 'secondary',
     type: 'quizizzsnapshot',
     apiUrl: 'quizizz.json',
-    pageUrl: 'https://statuspage.freshping.io/621-QuizizzStatusPage/'
-  },
+    pageUrl: 'https://statuspage.freshping.io/621-QuizizzStatusPage/',
+    whatItDoes: 'Game-based quizzing with self-paced and live modes. Recently rebranded "Wayground" but still commonly called Quizizz.',
+    whenDown: 'Both live and homework-mode quizzes stop. Reports already generated remain viewable.'},
   // Gimkit (status page hosted on Crisp Status, no public unauthenticated JSON
   // endpoint, so we scrape the rendered banner via GitHub Actions to gimkit.json)
   {
@@ -950,8 +1027,9 @@ const VENDORS = [
     tier: 'secondary',
     type: 'gimkitsnapshot',
     apiUrl: 'gimkit.json',
-    pageUrl: 'https://gimkit.crisp.watch/en/'
-  },
+    pageUrl: 'https://gimkit.crisp.watch/en/',
+    whatItDoes: 'Game-based learning with multiple game modes; 2D modes are popular with students.',
+    whenDown: 'All game modes stop; assigned practice can\'t be completed until restored.'},
   // Soundtrap (bare HTML status page with a single sentence — only one bit of state
   // available, so we can detect operational vs not-operational but no severity nuance)
   {
@@ -962,8 +1040,9 @@ const VENDORS = [
     tier: 'secondary',
     type: 'soundtrapsnapshot',
     apiUrl: 'soundtrap.json',
-    pageUrl: 'https://status.soundtrap.com/'
-  },
+    pageUrl: 'https://status.soundtrap.com/',
+    whatItDoes: 'Browser-based music creation and podcast recording — used in music and language classes.',
+    whenDown: 'New recording and editing pauses; saved projects remain in students\' accounts.'},
   // NoRedInk (status page hosted on Status.io, scraped to noredink.json by
   // GitHub Actions. Replaces the previous StatusGator link-only tile now that
   // we have live parsing of the vendor's own status page.)
@@ -975,8 +1054,9 @@ const VENDORS = [
     tier: 'secondary',
     type: 'noredinksnapshot',
     apiUrl: 'noredink.json',
-    pageUrl: 'https://noredinkstatus.com/'
-  },
+    pageUrl: 'https://noredinkstatus.com/',
+    whatItDoes: 'Adaptive grammar and writing practice. Used heavily in English classes.',
+    whenDown: 'Practice sets can\'t be completed; teacher dashboards may not refresh.'},
   // DeltaMath (Atlassian Statuspage v2 with public CORS-enabled API, so we
   // fetch directly in the browser — no GitHub Action needed. Same code path
   // as Canvas, AspirEDU, Cloudflare, etc. Previously a StatusGator link-only
@@ -990,8 +1070,9 @@ const VENDORS = [
     type: 'statuspage',
     apiUrl: 'https://status.deltamath.com/api/v2/status.json',
     summaryUrl: 'https://status.deltamath.com/api/v2/summary.json',
-    pageUrl: 'https://status.deltamath.com/'
-  },
+    pageUrl: 'https://status.deltamath.com/',
+    whatItDoes: 'Math practice with detailed step-by-step feedback and adaptive difficulty.',
+    whenDown: 'Students can\'t complete assignments; teacher gradebooks may not sync until restored.'},
 
   // ============================================================
   // INFRASTRUCTURE (2) — platforms our tools depend on
@@ -1017,8 +1098,9 @@ const VENDORS = [
     tier: 'infra',
     type: 'awssnapshot',
     apiUrl: 'aws.json',
-    pageUrl: 'https://health.aws.amazon.com/health/status'
-  },
+    pageUrl: 'https://health.aws.amazon.com/health/status',
+    whatItDoes: 'Amazon\'s cloud — hosts Canvas, NoRedInk, Quizizz, and many other vendors above.',
+    whenDown: 'Whatever\'s hosted on the affected AWS region goes down with it. This tile is context — check it when a primary tool is also red.'},
   // Cloudflare uses Atlassian Statuspage v2 with a public CORS-enabled API,
   // so we fetch it directly in the browser — no GitHub Action needed. Reuses
   // the same fetchStatuspage() code path as Canvas, Blackbaud, etc.
@@ -1031,8 +1113,9 @@ const VENDORS = [
     type: 'statuspage',
     apiUrl: 'https://www.cloudflarestatus.com/api/v2/status.json',
     summaryUrl: 'https://www.cloudflarestatus.com/api/v2/summary.json',
-    pageUrl: 'https://www.cloudflarestatus.com/'
-  }
+    pageUrl: 'https://www.cloudflarestatus.com/',
+    whatItDoes: 'Routes and protects traffic for many vendor sites — sits between us and them.',
+    whenDown: 'Vendors fronted by Cloudflare may become unreachable, slow, or throw errors. Like AWS, this is context — check it when a primary tool is also red.'}
 ];
 
 //=============================================================================
@@ -1930,6 +2013,7 @@ function renderTile(vendor, result) {
   main.textContent = vendor.type === 'linkonly'
     ? 'Open ' + vendor.name + ' status page'
     : 'Status page';
+  main.addEventListener('click', (e) => e.stopPropagation());
   links.appendChild(main);
   if (vendor.extraLink) {
     const sep = document.createElement('span');
@@ -1942,6 +2026,7 @@ function renderTile(vendor, result) {
     extra.target = '_blank';
     extra.rel = 'noopener';
     extra.textContent = vendor.extraLink.label;
+    extra.addEventListener('click', (e) => e.stopPropagation());
     links.appendChild(sep);
     links.appendChild(extra);
   }
@@ -1954,6 +2039,37 @@ function renderTile(vendor, result) {
     footer.appendChild(ts);
   }
   tile.appendChild(footer);
+
+  // Expand block — "what does this mean for me" detail. Renders only if the
+  // vendor entry has whatItDoes/whenDown copy. Hidden by default; toggled by
+  // clicking anywhere on the tile (except on the footer links). Helps faculty
+  // build vendor literacy without cluttering the default scan.
+  if (vendor.whatItDoes || vendor.whenDown) {
+    tile.classList.add('is-expandable');
+
+    const expand = document.createElement('div');
+    expand.className = 'tile-expand';
+
+    if (vendor.whatItDoes) {
+      const what = document.createElement('div');
+      what.className = 'tile-expand-row';
+      what.innerHTML = '<strong>What it does:</strong> ' + escapeHtml(vendor.whatItDoes);
+      expand.appendChild(what);
+    }
+    if (vendor.whenDown) {
+      const when = document.createElement('div');
+      when.className = 'tile-expand-row';
+      when.innerHTML = '<strong>If it\'s down:</strong> ' + escapeHtml(vendor.whenDown);
+      expand.appendChild(when);
+    }
+    tile.appendChild(expand);
+
+    // Toggle expansion on tile click. Footer links call stopPropagation so
+    // clicking "Status page →" opens the link without also toggling the panel.
+    tile.addEventListener('click', () => {
+      tile.classList.toggle('is-expanded');
+    });
+  }
 
   return tile;
 }
@@ -2396,6 +2512,45 @@ async function refreshAll() {
 
 document.getElementById('refreshBtn').addEventListener('click', () => {
   refreshAll();
+});
+
+// Copy dashboard link to clipboard with 2s confirmation feedback. Common
+// request when faculty want to share the dashboard URL during an outage.
+// Uses the modern Clipboard API; falls back to a hidden textarea + execCommand
+// for older browsers or non-secure contexts (rare on rjedtech.github.io but
+// cheap to support).
+document.getElementById('copyLinkBtn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const originalText = btn.textContent;
+  const url = window.location.href;
+
+  const showConfirmation = (success) => {
+    btn.textContent = success ? '✓ Copied!' : '✗ Copy failed';
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }, 2000);
+  };
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+      showConfirmation(true);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      showConfirmation(ok);
+    }
+  } catch (_) {
+    showConfirmation(false);
+  }
 });
 
 // Initial load
