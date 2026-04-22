@@ -1,0 +1,133 @@
+name: Fetch Microsoft 365 status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-m365:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and parse M365 RSS
+        run: |
+          mkdir -p data
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          const FEED_URL = 'https://status.cloud.microsoft/feed/rss';
+          const OUT_PATH = 'data/m365.json';
+
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
+                  return;
+                }
+                let body = '';
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
+            });
+          }
+
+          // Tiny, dependency-free RSS parser. Microsoft's feed is simple and
+          // stable enough that string extraction is fine — no need for an XML lib.
+          function extractTag(xml, tag) {
+            const re = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'i');
+            const m = xml.match(re);
+            return m ? m[1].trim() : '';
+          }
+
+          function extractAllItems(xml) {
+            const items = [];
+            const re = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+            let m;
+            while ((m = re.exec(xml)) !== null) {
+              items.push(m[1]);
+            }
+            return items;
+          }
+
+          (async () => {
+            try {
+              const xml = await fetchUrl(FEED_URL);
+              const items = extractAllItems(xml);
+
+              if (items.length === 0) {
+                console.error('No <item> elements found in feed');
+                process.exit(1);
+              }
+
+              const firstItem = items[0];
+              const status = extractTag(firstItem, 'status');
+              const title = extractTag(firstItem, 'title');
+              const pubDate = extractTag(firstItem, 'pubDate');
+
+              // The "content" fields are what we compare for change detection.
+              // fetchedAt is tracked separately so it doesn't trigger a commit
+              // every 5 minutes when nothing has actually changed.
+              const content = {
+                source: FEED_URL,
+                status: status || 'Unknown',
+                title: title || '',
+                pubDate: pubDate || '',
+                itemCount: items.length
+              };
+
+              // Read existing file (if any) and compare content fields only
+              let existingContent = null;
+              if (fs.existsSync(OUT_PATH)) {
+                try {
+                  const existing = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+                  existingContent = {
+                    source: existing.source,
+                    status: existing.status,
+                    title: existing.title,
+                    pubDate: existing.pubDate,
+                    itemCount: existing.itemCount
+                  };
+                } catch (_) { /* malformed, treat as no existing */ }
+              }
+
+              const contentChanged = JSON.stringify(content) !== JSON.stringify(existingContent);
+
+              if (contentChanged) {
+                const snapshot = {
+                  fetchedAt: new Date().toISOString(),
+                  ...content
+                };
+                fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+                console.log('Status content changed — wrote', OUT_PATH);
+                console.log(JSON.stringify(snapshot, null, 2));
+              } else {
+                console.log('No content change — skipping write.');
+              }
+            } catch (err) {
+              console.error('Failed to fetch/parse M365 RSS:', err.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/m365.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update M365 status snapshot [skip ci]"
+            git push
+          fi

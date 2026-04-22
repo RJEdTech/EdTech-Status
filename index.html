@@ -340,13 +340,13 @@ const VENDORS = [
     pageUrl: 'https://status.copyleaks.com/'
   },
 
-  // --- Microsoft RSS ---
+  // --- Microsoft 365 (RSS proxied via GitHub Actions to data/m365.json) ---
   {
     id: 'm365',
     name: 'Microsoft 365',
-    sub: 'Admin Center status (RSS)',
-    type: 'm365rss',
-    apiUrl: 'https://status.cloud.microsoft/feed/rss',
+    sub: 'Admin Center status',
+    type: 'm365snapshot',
+    apiUrl: 'data/m365.json',
     pageUrl: 'https://status.cloud.microsoft/'
   },
 
@@ -509,46 +509,41 @@ function mapInstatusImpact(impact) {
   }
 }
 
-// Microsoft 365 RSS feed:
-//   The feed has a single <item> whose <status> child indicates the current state.
-//   When all is well, status = "Available". When something's wrong, the item
-//   description carries detail and there may be additional items.
+// Microsoft 365 snapshot file:
+//   Written by the .github/workflows/fetch-m365.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//   Status field comes from the RSS feed's <status> element on the first item.
+//   "Available" = operational; anything else = at least partial outage.
 async function fetchM365(vendor) {
   const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  const xmlText = await res.text();
-  const parser = new DOMParser();
-  const xml = parser.parseFromString(xmlText, 'text/xml');
+  const data = await res.json();
 
-  const items = Array.from(xml.querySelectorAll('item'));
-  if (items.length === 0) {
-    return { severity: 'unknown', statusText: 'No data', incident: null, updatedAt: null };
-  }
-
-  // The first item's <status> child tells us the high-level state.
-  const firstItem = items[0];
-  const statusEl = firstItem.querySelector('status');
-  const titleEl = firstItem.querySelector('title');
-  const pubDateEl = firstItem.querySelector('pubDate');
-  const status = (statusEl?.textContent || '').trim();
-  const title = (titleEl?.textContent || '').trim();
-  const pubDate = (pubDateEl?.textContent || '').trim();
+  const status = (data.status || '').trim();
+  const isAvailable = status.toLowerCase() === 'available';
 
   let severity = 'operational';
   let statusText = 'All services available';
   let incident = null;
 
-  if (status && status.toLowerCase() !== 'available') {
+  if (status && !isAvailable) {
     severity = 'partial';
     statusText = status;
     incident = {
-      name: title || 'Service issue reported',
+      name: data.title || 'Service issue reported',
       status: status,
-      updatedAt: pubDate ? new Date(pubDate).toISOString() : null
+      updatedAt: data.pubDate ? new Date(data.pubDate).toISOString() : null
     };
   }
 
-  return { severity, statusText, incident, updatedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() };
+  // Use the snapshot's own fetchedAt as our "updated" indicator so the user
+  // can see how fresh the underlying data is, not just when the dashboard pulled it.
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
 }
 
 //=============================================================================
@@ -794,9 +789,9 @@ function renderAll(results) {
 //=============================================================================
 async function fetchVendor(vendor) {
   switch (vendor.type) {
-    case 'statuspage': return fetchStatuspage(vendor);
-    case 'instatus':   return fetchInstatus(vendor);
-    case 'm365rss':    return fetchM365(vendor);
+    case 'statuspage':    return fetchStatuspage(vendor);
+    case 'instatus':      return fetchInstatus(vendor);
+    case 'm365snapshot':  return fetchM365(vendor);
     default: throw new Error('Unknown vendor type: ' + vendor.type);
   }
 }

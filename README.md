@@ -50,6 +50,12 @@ Single-file vanilla HTML/JS, no build step, no framework dependencies. Hosted on
 
 The dashboard makes external API calls to vendor status endpoints — this is a deliberate exception to the standard RJEdTech "no external calls" rule, because the entire purpose of the tool is aggregating those calls. No user data is collected, no analytics are sent, and the only thing stored locally is a cache of the most recent status response per vendor (used as a fallback when an API call fails).
 
+### Microsoft 365 (special case)
+
+Microsoft's status RSS feed doesn't send the CORS header browsers require for cross-origin requests, so the dashboard can't fetch it directly from the client. To work around this, a GitHub Actions workflow (`.github/workflows/fetch-m365.yml`) runs every 5 minutes, fetches the feed server-side, parses it, and commits the result as `data/m365.json`. The dashboard then reads that JSON file from same-origin, no CORS issue.
+
+The workflow only commits when the status content actually changes — not on every timestamp tick — so the repo doesn't fill up with noise commits.
+
 ## Privacy
 
 - **No user data is collected, stored, or transmitted.**
