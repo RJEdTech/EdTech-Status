@@ -64,24 +64,23 @@
     --neutral:     #6b7280;
     --slate:       #94a3b8;       /* breakage — distinct from "unknown" */
 
-    /* Watermark visibility (lower opacity overlay = more visible crest) */
-    --watermark-overlay: rgba(15,15,26,0.92);
-    --watermark-blend: normal;
+    /* Watermark crest opacity. Dark mode wants the crest faint enough to read
+       as texture, not as decoration competing with the data. */
+    --watermark-opacity: 0.06;
   }
 
   /* ----- LIGHT THEME ----- */
   :root[data-theme="light"] {
     --bg:          #ffffff;
-    /* Tile surfaces are intentionally NOT pure white. With a watermark
-       behind everything, white-on-white tiles look like holes the crest
-       shows through. An off-white surface gives tiles a clear edge against
-       the page and lets the watermark sit behind them as actual background
-       texture rather than punching through. */
-    --surface:     #f4f4f6;
-    --surface-2:   #ebebef;
-    --border:      rgba(0,0,0,0.14);
-    --border-mid:  rgba(0,0,0,0.22);
-    --border-strong: rgba(0,0,0,0.34);
+    /* Tile surfaces are very slightly off-white. The bleed problem from
+       earlier versions is now fixed at the watermark layer (the crest sits
+       on its own div behind .container, no blend modes), so this off-white
+       is purely for tile definition against the page background. */
+    --surface:     #fafafa;
+    --surface-2:   #f0f0f2;
+    --border:      rgba(0,0,0,0.12);
+    --border-mid:  rgba(0,0,0,0.20);
+    --border-strong: rgba(0,0,0,0.32);
 
     --ink:         #0f0f1a;
     --ink-dim:     rgba(15,15,26,0.70);
@@ -101,11 +100,10 @@
     --neutral:     #6b7280;
     --slate:       #64748b;
 
-    /* In light mode, watermark sits behind a near-white veil and uses
-       multiply blend so the crest reads as a faint red ghost rather than
-       a competing photo. */
-    --watermark-overlay: rgba(255,255,255,0.92);
-    --watermark-blend: multiply;
+    /* Light mode wants a slightly higher opacity than dark mode because the
+       red crest fades faster against a white-ish page than against a near-
+       black page. Still subtle — texture, not decoration. */
+    --watermark-opacity: 0.08;
   }
 
   /* ======================================================================
@@ -124,26 +122,29 @@
     transition: background-color 0.18s ease, color 0.18s ease;
   }
 
-  /* Subtle crest watermark behind all content. The overlay color is themed
-     so light mode shows the crest as a faint red ghost (multiply blend on
-     near-white veil) rather than a black blob. Dark mode overlays a deep
-     near-black so the crest reads as a very subtle texture. */
-  body {
+  /* Watermark crest — sits truly behind the page content via a fixed-position
+     element. Previous implementations used body background-image + a blend-mode
+     overlay, which caused the crest to bleed through semi-transparent tile
+     surfaces (the multiply blend would modulate any non-pure-white pixel,
+     including the off-white tile fill). This implementation puts the crest
+     on its own layer at z-index 0; tiles sit on top via the .container at
+     z-index 1. No blend modes, no semi-transparent overlay — just a static
+     background image with opacity. The opacity is themed because the crest's
+     red ink reads differently against dark vs light page backgrounds. */
+  .watermark {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
     background-image: url('shield.webp');
     background-repeat: no-repeat;
     background-position: center center;
     background-attachment: fixed;
     background-size: min(70vh, 600px) auto;
-    position: relative;
+    opacity: var(--watermark-opacity);
   }
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: var(--watermark-overlay);
-    mix-blend-mode: var(--watermark-blend);
-    pointer-events: none;
-    z-index: 0;
+  body {
+    position: relative;
   }
 
   .container {
@@ -602,6 +603,7 @@
 </style>
 </head>
 <body>
+<div class="watermark" aria-hidden="true"></div>
 <div class="container">
 
   <header class="page-head">
