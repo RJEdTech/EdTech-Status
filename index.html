@@ -681,34 +681,22 @@
   <div class="grid grid-task" id="taskGrid-teach"></div>
 
   <div class="section-label">
-    <span>Email &amp; files</span>
-    <span class="section-label-note">Outlook, OneDrive, SharePoint</span>
+    <span>Email &amp; communication</span>
+    <span class="section-label-note">Outlook and Teams</span>
   </div>
-  <div class="grid grid-task" id="taskGrid-files"></div>
+  <div class="grid grid-task" id="taskGrid-comm"></div>
 
   <div class="section-label">
-    <span>Quizzes &amp; assessments</span>
-    <span class="section-label-note">LockDown Browser, Copyleaks, AspirEDU, DeltaMath</span>
+    <span>Canvas integrations</span>
+    <span class="section-label-note">Tools that plug into Canvas for grading, practice, and assessment</span>
   </div>
-  <div class="grid grid-task" id="taskGrid-assess"></div>
+  <div class="grid grid-task" id="taskGrid-canvas"></div>
 
   <div class="section-label">
-    <span>Student practice &amp; games</span>
-    <span class="section-label-note">IXL, Kahoot, Quizizz, Gimkit, NoRedInk, Gizmos</span>
+    <span>Other teaching tools</span>
+    <span class="section-label-note">General-purpose tools some teachers use</span>
   </div>
-  <div class="grid grid-task" id="taskGrid-practice"></div>
-
-  <div class="section-label">
-    <span>Creative &amp; music</span>
-    <span class="section-label-note">Soundtrap</span>
-  </div>
-  <div class="grid grid-task" id="taskGrid-creative"></div>
-
-  <div class="section-label">
-    <span>Records &amp; gradebook</span>
-    <span class="section-label-note">Blackbaud — SIS, attendance, grades</span>
-  </div>
-  <div class="grid grid-task" id="taskGrid-records"></div>
+  <div class="grid grid-task" id="taskGrid-other"></div>
 
   <div class="section-label">
     <span>Behind the scenes</span>
@@ -782,7 +770,7 @@ const VENDORS = [
   },
   {
     id: 'm365_sharepoint',
-    task: 'files',
+    task: 'teach',
     name: 'OneDrive / SharePoint',
     sub: 'Where student work lives',
     tier: 'critical',
@@ -793,7 +781,7 @@ const VENDORS = [
   },
   {
     id: 'm365_exchange',
-    task: 'files',
+    task: 'comm',
     name: 'Exchange / Outlook',
     sub: 'Mail and calendar',
     tier: 'critical',
@@ -820,7 +808,7 @@ const VENDORS = [
   // ============================================================
   {
     id: 'm365_teams',
-    task: 'teach',
+    task: 'comm',
     name: 'Microsoft Teams',
     sub: 'Staff comms, DECA, meetings',
     tier: 'core',
@@ -839,7 +827,7 @@ const VENDORS = [
     // If we ever want to scope down to specific components, switch to summary.json
     // and filter by component group ID.
     id: 'blackbaud',
-    task: 'records',
+    task: 'teach',
     name: 'Blackbaud',
     sub: 'SIS, LMS, EMS, financials, ID',
     tier: 'core',
@@ -879,9 +867,9 @@ const VENDORS = [
   // ============================================================
   {
     id: 'respondus',
-    task: 'assess',
-    name: 'Respondus',
-    sub: 'LockDown Browser & Monitor',
+    task: 'canvas',
+    name: 'LockDown Browser',
+    sub: 'Respondus — secure exam browser',
     tier: 'secondary',
     type: 'statuspage',
     apiUrl: 'https://status.respondus.com/api/v2/status.json',
@@ -891,7 +879,7 @@ const VENDORS = [
   },
   {
     id: 'copyleaks',
-    task: 'assess',
+    task: 'canvas',
     name: 'Copyleaks',
     sub: 'AI detection & plagiarism',
     tier: 'secondary',
@@ -901,9 +889,9 @@ const VENDORS = [
   },
   {
     id: 'aspiredu',
-    task: 'assess',
-    name: 'AspirEDU',
-    sub: 'Grade Guardian, Dropout Detective',
+    task: 'canvas',
+    name: 'Grade Guardian',
+    sub: 'AspirEDU — student progress monitoring',
     tier: 'secondary',
     type: 'statuspage',
     apiUrl: 'https://aspiredu.statuspage.io/api/v2/status.json',
@@ -912,9 +900,9 @@ const VENDORS = [
   },
   {
     id: 'explorelearning',
-    task: 'practice',
-    name: 'ExploreLearning',
-    sub: 'Gizmos, Reflex, Frax',
+    task: 'canvas',
+    name: 'Gizmos',
+    sub: 'ExploreLearning — Gizmos, Reflex, Frax',
     tier: 'secondary',
     type: 'elsnapshot',
     apiUrl: 'explorelearning.json',
@@ -924,7 +912,7 @@ const VENDORS = [
   // JSON endpoint, so we scrape the inline JS blob via GitHub Actions to ixl.json)
   {
     id: 'ixl',
-    task: 'practice',
+    task: 'canvas',
     name: 'IXL',
     sub: 'status.ixl.com',
     tier: 'secondary',
@@ -934,7 +922,7 @@ const VENDORS = [
   },
   {
     id: 'kahoot',
-    task: 'practice',
+    task: 'other',
     name: 'Kahoot',
     sub: 'Game-based learning',
     tier: 'secondary',
@@ -949,7 +937,7 @@ const VENDORS = [
   // so we label it Quizizz with a sub-line noting the rebrand.
   {
     id: 'quizizz',
-    task: 'practice',
+    task: 'other',
     name: 'Quizizz',
     sub: 'Now branded "Wayground"',
     tier: 'secondary',
@@ -961,7 +949,7 @@ const VENDORS = [
   // endpoint, so we scrape the rendered banner via GitHub Actions to gimkit.json)
   {
     id: 'gimkit',
-    task: 'practice',
+    task: 'canvas',
     name: 'Gimkit',
     sub: 'Game-based learning & 2D modes',
     tier: 'secondary',
@@ -973,7 +961,7 @@ const VENDORS = [
   // available, so we can detect operational vs not-operational but no severity nuance)
   {
     id: 'soundtrap',
-    task: 'creative',
+    task: 'canvas',
     name: 'Soundtrap',
     sub: 'Music creation & podcasting',
     tier: 'secondary',
@@ -986,7 +974,7 @@ const VENDORS = [
   // we have live parsing of the vendor's own status page.)
   {
     id: 'noredink',
-    task: 'practice',
+    task: 'canvas',
     name: 'NoRedInk',
     sub: 'Grammar & writing practice',
     tier: 'secondary',
@@ -1000,7 +988,7 @@ const VENDORS = [
   // tile until we discovered DeltaMath has its own first-party status page.)
   {
     id: 'deltamath',
-    task: 'assess',
+    task: 'canvas',
     name: 'DeltaMath',
     sub: 'status.deltamath.com',
     tier: 'secondary',
