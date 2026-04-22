@@ -72,11 +72,16 @@
   /* ----- LIGHT THEME ----- */
   :root[data-theme="light"] {
     --bg:          #ffffff;
-    --surface:     #ffffff;
-    --surface-2:   #f7f7f8;
-    --border:      rgba(0,0,0,0.10);
-    --border-mid:  rgba(0,0,0,0.18);
-    --border-strong: rgba(0,0,0,0.30);
+    /* Tile surfaces are intentionally NOT pure white. With a watermark
+       behind everything, white-on-white tiles look like holes the crest
+       shows through. An off-white surface gives tiles a clear edge against
+       the page and lets the watermark sit behind them as actual background
+       texture rather than punching through. */
+    --surface:     #f4f4f6;
+    --surface-2:   #ebebef;
+    --border:      rgba(0,0,0,0.14);
+    --border-mid:  rgba(0,0,0,0.22);
+    --border-strong: rgba(0,0,0,0.34);
 
     --ink:         #0f0f1a;
     --ink-dim:     rgba(15,15,26,0.70);
@@ -174,7 +179,7 @@
      If either fails to load the onerror handler hides it; we don't render
      a text fallback, since both logo files are committed to the repo. */
   .brand-logo-img {
-    height: 52px;
+    height: 72px;
     width: auto;
     flex-shrink: 0;
     display: block;
@@ -591,8 +596,7 @@
     .grid { grid-template-columns: 1fr; }
     .meta { align-items: flex-start; }
     .head-row { align-items: flex-start; }
-    .brand-logo-img { height: 42px; }
-    .brand-wordmark svg { height: 36px; }
+    .brand-logo-img { height: 56px; }
     body { background-size: min(50vh, 320px) auto; }
   }
 </style>
