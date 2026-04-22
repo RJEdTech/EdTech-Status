@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-04-22T21:40:57.489Z",
+  "fetchedAt": "2026-04-22T21:45:32.789Z",
   "source": "https://status.cloud.microsoft/feed/rss",
   "services": {
     "entra": {
@@ -44,7 +44,7 @@
     }
   ],
   "parseError": {
-    "message": "No <item> elements found in feed — Microsoft may have changed the feed structure.",
+    "message": "Response does not appear to be RSS — Microsoft may have changed the feed format or URL.",
     "firstFailedAt": "2026-04-22T21:40:57.489Z"
   },
   "lastSuccessfulParse": "2026-04-22T18:26:00Z"
