@@ -6,5 +6,7 @@
   "isMaintenance": false,
   "isCritical": false,
   "incidentCount": 0,
-  "firstIncidentName": ""
+  "firstIncidentName": "",
+  "parseError": null,
+  "lastSuccessfulParse": "2026-04-22T18:48:47Z"
 }

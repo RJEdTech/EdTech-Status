@@ -108,56 +108,91 @@ jobs:
           }
 
           (async () => {
+            // Helper: read existing snapshot if present
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            // Helper: compare two objects' content fields (ignoring volatile timestamps)
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'severity', 'isOperational', 'isMaintenance',
+                              'isCritical', 'incidentCount', 'firstIncidentName',
+                              'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
             try {
               const html = await fetchUrl(PAGE_URL);
               const parsed = parseStatus(html);
 
-              // Content fields used for change detection. fetchedAt is tracked
-              // separately so it doesn't trigger a commit every 5 minutes when
-              // nothing has actually changed.
-              const content = {
+              const now = new Date().toISOString();
+              const newContent = {
                 source: PAGE_URL,
                 severity: parsed.severity,
                 isOperational: parsed.isOperational,
                 isMaintenance: parsed.isMaintenance,
                 isCritical: parsed.isCritical,
                 incidentCount: parsed.incidentCount,
-                firstIncidentName: parsed.firstIncidentName
+                firstIncidentName: parsed.firstIncidentName,
+                parseError: null,            // explicitly cleared on success
+                lastSuccessfulParse: now     // updated on every successful parse
               };
 
-              // Read existing file (if any) and compare content fields only
-              let existingContent = null;
-              if (fs.existsSync(OUT_PATH)) {
-                try {
-                  const existing = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
-                  existingContent = {
-                    source: existing.source,
-                    severity: existing.severity,
-                    isOperational: existing.isOperational,
-                    isMaintenance: existing.isMaintenance,
-                    isCritical: existing.isCritical,
-                    incidentCount: existing.incidentCount,
-                    firstIncidentName: existing.firstIncidentName
-                  };
-                } catch (_) { /* malformed, treat as no existing */ }
-              }
-
-              const contentChanged = JSON.stringify(content) !== JSON.stringify(existingContent);
-
-              if (contentChanged) {
-                const snapshot = {
-                  fetchedAt: new Date().toISOString(),
-                  ...content
-                };
-                fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
-                console.log('Status content changed — wrote', OUT_PATH);
-                console.log(JSON.stringify(snapshot, null, 2));
-              } else {
+              if (contentEqual(newContent, existing)) {
                 console.log('No content change — skipping write. Current severity:', parsed.severity);
+                return;
               }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
             } catch (err) {
+              // Don't lose the last-known status. Preserve everything from the last good
+              // fetch and layer parseError on top so the dashboard can flag the breakage
+              // while still showing the most recent valid reading.
               console.error('Failed to fetch/parse IXL status page:', err.message);
-              process.exit(1);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: PAGE_URL,
+                severity: lastGood.severity || 'unknown',
+                isOperational: lastGood.isOperational ?? null,
+                isMaintenance: lastGood.isMaintenance ?? null,
+                isCritical: lastGood.isCritical ?? null,
+                incidentCount: lastGood.incidentCount ?? 0,
+                firstIncidentName: lastGood.firstIncidentName || '',
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              // Only commit if the breakage state itself changed (don't spam commits
+              // every 5 minutes during a sustained outage of the scraper itself)
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+              // Don't exit 1 here — we need the commit step to run so the breakage
+              // state actually gets pushed. A separate step at the end of the job
+              // checks the resulting JSON and fails the workflow run if parseError
+              // is set, which keeps the GitHub Actions red X for alerting.
             }
           })();
           EOF
@@ -173,3 +208,16 @@ jobs:
             git commit -m "Update IXL status snapshot [skip ci]"
             git push
           fi
+
+      - name: Fail run if scraper is broken
+        # This step exists so the GitHub Actions run shows red whenever the
+        # scraper can't parse the page, even though we wrote the breakage state
+        # to JSON in a clean exit (so the commit step could run). The dashboard
+        # surfaces breakage from the JSON; this step exists for GitHub-side alerting.
+        run: |
+          if [ -f ixl.json ] && grep -q '"parseError": {' ixl.json; then
+            echo "::error::IXL scraper failed to parse the page. See ixl.json for details."
+            cat ixl.json
+            exit 1
+          fi
+          echo "IXL scraper succeeded."

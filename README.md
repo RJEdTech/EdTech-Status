@@ -34,10 +34,24 @@ It auto-refreshes every five minutes when the tab is visible and pauses when the
 - **Yellow dot** — degraded performance or maintenance
 - **Orange dot** — partial outage
 - **Red dot** — major outage
+- **Slate dot with wrench glyph** — *status check broken*. The dashboard tried to read this vendor's status and either couldn't reach the source or didn't recognize the response. The vendor itself may be fine; you just have to verify manually by clicking through.
 - **Gray dot** — status couldn't be reached (cached value shown if available)
 - **Hollow circle** — link-only tile, manual check required
 
 When a vendor reports an incident, the tile expands to show the incident name, current state (investigating, identified, monitoring, resolved), and how recently it was updated.
+
+When a status check is broken, the tile shows the last-known reading (and how stale it is) plus the underlying error so you can judge whether to trust the prior reading.
+
+## Outage vs. breakage — why the distinction matters
+
+A red tile means the *vendor* says something is wrong. A slate tile means the *dashboard* can't read the source — the vendor itself might be perfectly fine, or might be on fire, we genuinely don't know.
+
+These two failure modes look superficially similar but require different responses:
+
+- **Outage:** trust the dashboard, communicate the issue, escalate per normal incident handling.
+- **Breakage:** don't trust the dashboard for that vendor, click through to verify status manually, and Jason needs to fix the scraper (likely the vendor changed their page structure).
+
+The summary banner at the top counts these separately. A line like *"2 tools reporting issues · 1 status check broken"* means two real outages and one tile you can't trust right now.
 
 ## Important caveats
 

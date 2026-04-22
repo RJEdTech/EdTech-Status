@@ -47,62 +47,92 @@ jobs:
           //     - the heading "A-OK!" inside <p class="h1 xbold mb-0 text-green">
           //     - text: "All ExploreLearning sites are currently working with no issues."
           //
-          //   Anything else — we don't try to parse incident details, because we
-          //   don't have a confirmed example of the down-state HTML and guessing
-          //   would be fragile. Tile shows "issue reported, see vendor page" and
-          //   the user clicks through.
+          //   "Issue reported" — id marker present but no green text. We don't try
+          //   to parse incident details (no confirmed example of the down-state HTML),
+          //   but the presence of the id confirms we're still on the right page.
           //
-          // We require BOTH the id and the green-text marker so a partial page
-          // load or unrelated HTML change doesn't false-positive as operational.
+          //   "Page unrecognized" — neither marker present. Either the URL changed,
+          //   the page was redesigned, or we got a different page entirely (e.g.
+          //   a redirect to a marketing page). This is breakage, not an outage.
+          //
+          // We require BOTH the id and the green-text marker for "operational" so a
+          // partial page load or unrelated HTML change doesn't false-positive.
 
           function detectStatus(html) {
             const hasOkId = /id=["']site-status-a-ok["']/i.test(html);
             const hasGreenAOk = /class=["'][^"']*text-green[^"']*["'][^>]*>\s*A-OK!/i.test(html);
             if (hasOkId && hasGreenAOk) return 'operational';
-            return 'check_page';
+            if (hasOkId) return 'check_page';
+            // Neither marker — we don't recognize this page. Throw so the outer
+            // catch treats it as breakage.
+            throw new Error('Neither operational marker nor id="site-status-a-ok" found on the page — ExploreLearning may have redesigned the status page or changed the URL.');
           }
 
           (async () => {
+            // Helper: read existing snapshot if present
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            // Helper: compare two objects' content fields (ignoring volatile timestamps)
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'status', 'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
             try {
               const html = await fetchUrl(PAGE_URL);
               const status = detectStatus(html);
 
-              // Content fields used for change detection. fetchedAt is tracked
-              // separately so it doesn't trigger a commit every 5 minutes when
-              // nothing has actually changed.
-              const content = {
+              const now = new Date().toISOString();
+              const newContent = {
                 source: PAGE_URL,
-                status: status
+                status: status,
+                parseError: null,            // explicitly cleared on success
+                lastSuccessfulParse: now     // updated on every successful parse
               };
 
-              // Read existing file (if any) and compare content fields only
-              let existingContent = null;
-              if (fs.existsSync(OUT_PATH)) {
-                try {
-                  const existing = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
-                  existingContent = {
-                    source: existing.source,
-                    status: existing.status
-                  };
-                } catch (_) { /* malformed, treat as no existing */ }
-              }
-
-              const contentChanged = JSON.stringify(content) !== JSON.stringify(existingContent);
-
-              if (contentChanged) {
-                const snapshot = {
-                  fetchedAt: new Date().toISOString(),
-                  ...content
-                };
-                fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
-                console.log('Status content changed — wrote', OUT_PATH);
-                console.log(JSON.stringify(snapshot, null, 2));
-              } else {
+              if (contentEqual(newContent, existing)) {
                 console.log('No content change — skipping write. Current status:', status);
+                return;
               }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
             } catch (err) {
               console.error('Failed to fetch/parse ExploreLearning status page:', err.message);
-              process.exit(1);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: PAGE_URL,
+                status: lastGood.status || 'unknown',
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
             }
           })();
           EOF
@@ -118,3 +148,16 @@ jobs:
             git commit -m "Update ExploreLearning status snapshot [skip ci]"
             git push
           fi
+
+      - name: Fail run if scraper is broken
+        # This step exists so the GitHub Actions run shows red whenever the
+        # scraper can't recognize the page, even though we wrote the breakage state
+        # to JSON in a clean exit (so the commit step could run). The dashboard
+        # surfaces breakage from the JSON; this step exists for GitHub-side alerting.
+        run: |
+          if [ -f explorelearning.json ] && grep -q '"parseError": {' explorelearning.json; then
+            echo "::error::ExploreLearning scraper failed to recognize the page. See explorelearning.json for details."
+            cat explorelearning.json
+            exit 1
+          fi
+          echo "ExploreLearning scraper succeeded."

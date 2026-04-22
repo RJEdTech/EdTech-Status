@@ -4,5 +4,7 @@
   "status": "Available",
   "title": "Microsoft Admin Center",
   "pubDate": "Wed, 22 Apr 2026 18:26:00 Z",
-  "itemCount": 1
+  "itemCount": 1,
+  "parseError": null,
+  "lastSuccessfulParse": "2026-04-22T18:26:00Z"
 }

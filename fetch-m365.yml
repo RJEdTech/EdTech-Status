@@ -59,13 +59,32 @@ jobs:
           }
 
           (async () => {
+            // Helper: read existing snapshot if present
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            // Helper: compare two objects' content fields (ignoring volatile timestamps)
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'status', 'title', 'pubDate', 'itemCount',
+                              'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
             try {
               const xml = await fetchUrl(FEED_URL);
               const items = extractAllItems(xml);
 
               if (items.length === 0) {
-                console.error('No <item> elements found in feed');
-                process.exit(1);
+                throw new Error('No <item> elements found in feed — Microsoft may have changed the feed structure.');
               }
 
               const firstItem = items[0];
@@ -73,48 +92,61 @@ jobs:
               const title = extractTag(firstItem, 'title');
               const pubDate = extractTag(firstItem, 'pubDate');
 
-              // The "content" fields are what we compare for change detection.
-              // fetchedAt is tracked separately so it doesn't trigger a commit
-              // every 5 minutes when nothing has actually changed.
-              const content = {
+              // Defensive: status must be present and non-empty for us to trust the feed.
+              if (!status) {
+                throw new Error('First <item> missing <status> element — feed schema may have changed.');
+              }
+
+              const now = new Date().toISOString();
+              const newContent = {
                 source: FEED_URL,
-                status: status || 'Unknown',
+                status: status,
                 title: title || '',
                 pubDate: pubDate || '',
-                itemCount: items.length
+                itemCount: items.length,
+                parseError: null,            // explicitly cleared on success
+                lastSuccessfulParse: now     // updated on every successful parse
               };
 
-              // Read existing file (if any) and compare content fields only
-              let existingContent = null;
-              if (fs.existsSync(OUT_PATH)) {
-                try {
-                  const existing = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
-                  existingContent = {
-                    source: existing.source,
-                    status: existing.status,
-                    title: existing.title,
-                    pubDate: existing.pubDate,
-                    itemCount: existing.itemCount
-                  };
-                } catch (_) { /* malformed, treat as no existing */ }
-              }
-
-              const contentChanged = JSON.stringify(content) !== JSON.stringify(existingContent);
-
-              if (contentChanged) {
-                const snapshot = {
-                  fetchedAt: new Date().toISOString(),
-                  ...content
-                };
-                fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
-                console.log('Status content changed — wrote', OUT_PATH);
-                console.log(JSON.stringify(snapshot, null, 2));
-              } else {
+              if (contentEqual(newContent, existing)) {
                 console.log('No content change — skipping write.');
+                return;
               }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
             } catch (err) {
+              // Don't lose the last-known status. Preserve everything from the last good
+              // fetch and layer parseError on top so the dashboard can flag the breakage
+              // while still showing the most recent valid reading.
               console.error('Failed to fetch/parse M365 RSS:', err.message);
-              process.exit(1);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: FEED_URL,
+                status: lastGood.status || 'Unknown',
+                title: lastGood.title || '',
+                pubDate: lastGood.pubDate || '',
+                itemCount: lastGood.itemCount ?? 0,
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
             }
           })();
           EOF
@@ -130,3 +162,16 @@ jobs:
             git commit -m "Update M365 status snapshot [skip ci]"
             git push
           fi
+
+      - name: Fail run if scraper is broken
+        # This step exists so the GitHub Actions run shows red whenever the
+        # scraper can't parse the feed, even though we wrote the breakage state
+        # to JSON in a clean exit (so the commit step could run). The dashboard
+        # surfaces breakage from the JSON; this step exists for GitHub-side alerting.
+        run: |
+          if [ -f m365.json ] && grep -q '"parseError": {' m365.json; then
+            echo "::error::M365 scraper failed to parse the feed. See m365.json for details."
+            cat m365.json
+            exit 1
+          fi
+          echo "M365 scraper succeeded."

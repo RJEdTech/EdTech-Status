@@ -1,5 +1,7 @@
 {
   "fetchedAt": "2026-04-22T18:48:00Z",
   "source": "https://www.explorelearning.com/our-products/site-status",
-  "status": "operational"
+  "status": "operational",
+  "parseError": null,
+  "lastSuccessfulParse": "2026-04-22T18:48:00Z"
 }

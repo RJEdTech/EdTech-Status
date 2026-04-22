@@ -19,6 +19,7 @@
     --yellow: #facc15;
     --orange: #fb923c;
     --gray: #6b7280;
+    --slate: #64748b;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -190,6 +191,7 @@
   .tile:hover { border-color: var(--border-strong); }
   .tile.is-incident { border-left: 3px solid var(--red); padding-left: 18px; }
   .tile.is-degraded { border-left: 3px solid var(--yellow); padding-left: 18px; }
+  .tile.is-breakage { border-left: 3px solid var(--slate); padding-left: 18px; }
 
   .tile-row {
     display: flex;
@@ -225,6 +227,23 @@
   .dot.major       { background: var(--red); box-shadow: 0 0 10px rgba(193,20,48,0.5); }
   .dot.unknown     { background: var(--gray); }
   .dot.linkonly    { background: transparent; border: 1px solid var(--text-mute); }
+  /* Breakage = our scraper can't read the source. Distinct from outage colors
+     (red/orange/yellow) and from "unknown/loading" (gray). Slate with a wrench
+     glyph rendered via CSS so we don't need an icon font dependency. */
+  .dot.breakage {
+    background: var(--slate);
+    box-shadow: 0 0 8px rgba(100,116,139,0.4);
+    position: relative;
+  }
+  .dot.breakage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 70%;
+  }
 
   .status-text {
     font-size: 13px;
@@ -444,6 +463,44 @@ let refreshTimer = null;
 // FETCHERS
 //=============================================================================
 
+// Helper: build a result object for a vendor whose scraper or API has broken.
+// "Breakage" is distinct from a vendor-reported outage. It means we tried to
+// read the source and either couldn't (network) or didn't recognize what we
+// got back (schema drift). The dot is slate with a wrench glyph; the tile
+// shows the underlying last-known severity in the incident detail line so
+// the reader can judge how stale that reading is.
+//
+// firstFailedAt comes from the snapshot file (scraped vendors) and persists
+// across workflow runs, so we can show "broken since 6h ago." For runtime
+// fetches (Statuspage/Instatus), pass null and it'll just say "broken now."
+function buildBreakageResult({ vendorPageLabel, lastKnownSeverity, lastSuccessfulParse,
+                                firstFailedAt, errorMessage, updatedAt }) {
+  const lastKnownLabel = lastKnownSeverity && lastKnownSeverity !== 'unknown'
+    ? severityLabel(lastKnownSeverity).toLowerCase()
+    : null;
+
+  let detail;
+  if (lastKnownLabel && lastSuccessfulParse) {
+    detail = 'Last good reading: ' + lastKnownLabel + ' (' + formatTimestamp(lastSuccessfulParse) + ')';
+  } else if (lastKnownLabel) {
+    detail = 'Last good reading: ' + lastKnownLabel;
+  } else {
+    detail = 'No prior good reading available';
+  }
+
+  return {
+    severity: 'breakage',
+    statusText: 'Status check broken — open ' + vendorPageLabel + ' to verify',
+    incident: {
+      name: detail,
+      status: errorMessage || 'Could not parse source',
+      updatedAt: firstFailedAt || null
+    },
+    updatedAt: updatedAt || new Date().toISOString(),
+    breakage: true
+  };
+}
+
 // Atlassian Statuspage v2 status indicators:
 //   none    -> all good
 //   minor   -> degraded
@@ -453,8 +510,28 @@ async function fetchStatuspage(vendor) {
   const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
-  const indicator = data.status?.indicator || 'unknown';
-  const description = data.status?.description || 'Unknown';
+
+  // Schema validation: Atlassian Statuspage v2 has been stable for years, but
+  // if data.status.indicator is missing entirely, the response shape has drifted
+  // and we shouldn't quietly default to "unknown" (which renders as gray and
+  // looks like a network glitch). Surface as breakage so the reader knows the
+  // dashboard, not the vendor, is the problem.
+  const indicator = data.status?.indicator;
+  const knownIndicators = ['none', 'minor', 'major', 'critical', 'maintenance'];
+  if (!indicator || !knownIndicators.includes(indicator)) {
+    return buildBreakageResult({
+      vendorPageLabel: vendor.name + ' status page',
+      lastKnownSeverity: null,
+      lastSuccessfulParse: null,
+      firstFailedAt: null,
+      errorMessage: indicator
+        ? 'Unknown status indicator: "' + indicator + '"'
+        : 'status.indicator missing from API response',
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  const description = data.status?.description || severityLabel(mapStatuspageIndicator(indicator));
   const updatedAt = data.page?.updated_at;
 
   // Try to fetch unresolved incidents in parallel for richer display
@@ -502,7 +579,25 @@ async function fetchInstatus(vendor) {
   const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
-  const pageStatus = data.page?.status || 'UNKNOWN';
+
+  // Schema validation: Instatus pages always return data.page.status as one of
+  // a known set. If it's missing or unrecognized, surface as breakage rather
+  // than defaulting silently.
+  const pageStatus = data.page?.status;
+  const knownPageStatuses = ['UP', 'HASISSUES', 'UNDERMAINTENANCE'];
+  if (!pageStatus || !knownPageStatuses.includes(pageStatus)) {
+    return buildBreakageResult({
+      vendorPageLabel: vendor.name + ' status page',
+      lastKnownSeverity: null,
+      lastSuccessfulParse: null,
+      firstFailedAt: null,
+      errorMessage: pageStatus
+        ? 'Unknown page.status: "' + pageStatus + '"'
+        : 'page.status missing from API response',
+      updatedAt: new Date().toISOString()
+    });
+  }
+
   const activeIncidents = data.activeIncidents || [];
   const activeMaint = data.activeMaintenances || [];
 
@@ -564,6 +659,17 @@ async function fetchM365(vendor) {
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'Microsoft 365 status page',
+      lastKnownSeverity: data.status && data.status.toLowerCase() === 'available' ? 'operational' : 'partial',
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
   const status = (data.status || '').trim();
   const isAvailable = status.toLowerCase() === 'available';
 
@@ -608,6 +714,18 @@ async function fetchExploreLearning(vendor) {
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'ExploreLearning status page',
+      lastKnownSeverity: data.status === 'operational' ? 'operational' :
+                         data.status === 'check_page' ? 'partial' : null,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
   const status = (data.status || '').trim();
   const isOperational = status === 'operational';
 
@@ -648,6 +766,21 @@ async function fetchIXL(vendor) {
   const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
+
+  // Breakage takes precedence over the underlying severity. The workflow has
+  // told us it can no longer parse the source, so the last-known severity is
+  // stale and we shouldn't present it as authoritative. We *do* still surface
+  // it in the incident detail line so the reader can judge how stale.
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'IXL status page',
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
 
   const severity = data.severity || 'operational';
   let statusText;
@@ -720,6 +853,7 @@ function severityLabel(sev) {
     case 'partial': return 'Partial outage';
     case 'major': return 'Major outage';
     case 'unknown': return 'Status unknown';
+    case 'breakage': return 'Status check broken';
     default: return sev;
   }
 }
@@ -731,6 +865,10 @@ function severityRank(sev) {
     case 'degraded': return 2;
     case 'unknown': return 1;
     case 'operational': return 0;
+    // Breakage is intentionally ranked low — it's a meta-problem (we don't know
+    // the real status), not a vendor-confirmed outage. We don't want it floating
+    // above actual outages in the sort order. Banner alerting handles visibility.
+    case 'breakage': return 1;
     default: return 0;
   }
 }
@@ -763,6 +901,8 @@ function renderTile(vendor, result) {
 
   if (vendor.type === 'linkonly') {
     tile.classList.add('linkonly');
+  } else if (result?.severity === 'breakage') {
+    tile.classList.add('is-breakage');
   } else if (result?.severity === 'major' || result?.severity === 'partial') {
     tile.classList.add('is-incident');
   } else if (result?.severity === 'degraded') {
@@ -876,7 +1016,10 @@ function renderSummary(results) {
 
   const operational = liveResults.filter(r => r.severity === 'operational' && !r.error).length;
   const issues = liveResults.filter(r => ['degraded','partial','major'].includes(r.severity) && !r.error).length;
-  const unknown = liveResults.filter(r => r.severity === 'unknown' || r.error).length;
+  const broken = liveResults.filter(r => r.severity === 'breakage').length;
+  // "Unknown" = network failure or genuinely unknown, but excluding breakage
+  // (which we count separately so the summary isn't double-counting).
+  const unknown = liveResults.filter(r => (r.severity === 'unknown' || r.error) && r.severity !== 'breakage').length;
 
   const dot = document.getElementById('summaryDot');
   const text = document.getElementById('summaryText');
@@ -885,14 +1028,26 @@ function renderSummary(results) {
   // Pick the worst severity across all live vendors for the summary
   let worst = 'operational';
   for (const r of liveResults) {
-    if (r.error) continue;
+    if (r.error || r.severity === 'breakage') continue;
     if (severityRank(r.severity) > severityRank(worst)) worst = r.severity;
   }
 
+  // Banner priority: real outages first (vendor-confirmed), then breakage,
+  // then all-clear. This matters because a real outage is more actionable
+  // than a broken scraper, even if the broken scraper is more alarming-looking.
   if (issues > 0) {
     dot.style.background = worst === 'major' ? 'var(--red)' : worst === 'partial' ? 'var(--orange)' : 'var(--yellow)';
     dot.style.boxShadow = '0 0 12px ' + dot.style.background;
-    text.textContent = issues + ' tool' + (issues === 1 ? '' : 's') + ' reporting issues';
+    let msg = issues + ' tool' + (issues === 1 ? '' : 's') + ' reporting issues';
+    if (broken > 0) msg += ' · ' + broken + ' status check' + (broken === 1 ? '' : 's') + ' broken';
+    text.textContent = msg;
+  } else if (broken > 0) {
+    // No real outages, but at least one scraper is broken. Use slate so the
+    // banner reads as a meta-problem (the dashboard, not a vendor) and pair
+    // with explicit text so it can't be mistaken for an outage.
+    dot.style.background = 'var(--slate)';
+    dot.style.boxShadow = '0 0 12px rgba(100,116,139,0.4)';
+    text.textContent = broken + ' status check' + (broken === 1 ? '' : 's') + ' broken — verify those tools manually';
   } else if (operational === live.length) {
     dot.style.background = 'var(--green)';
     dot.style.boxShadow = '0 0 12px rgba(74,222,128,0.4)';
@@ -903,7 +1058,11 @@ function renderSummary(results) {
     text.textContent = 'Status partially available';
   }
 
-  counts.textContent = operational + ' operational · ' + issues + ' issue' + (issues === 1 ? '' : 's') + ' · ' + unknown + ' unknown · ' + (VENDORS.length - live.length) + ' link-only';
+  let countsLine = operational + ' operational · ' + issues + ' issue' + (issues === 1 ? '' : 's');
+  if (broken > 0) countsLine += ' · ' + broken + ' broken';
+  if (unknown > 0) countsLine += ' · ' + unknown + ' unknown';
+  countsLine += ' · ' + (VENDORS.length - live.length) + ' link-only';
+  counts.textContent = countsLine;
 }
 
 function renderAll(results) {
