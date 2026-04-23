@@ -147,18 +147,28 @@ jobs:
           })();
           EOF
 
-      - name: Commit if changed
+      - name: Commit state if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add quizizz.json
+          git add state/last-status.json
           if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "Update Quizizz status snapshot [skip ci]"
-            git push
+            echo "No state changes to commit."
+            exit 0
           fi
-
+          git commit -m "Update last-status.json [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              echo "Push succeeded on attempt $attempt."
+              exit 0
+            fi
+            echo "Push failed on attempt $attempt — rebasing and retrying..."
+            git pull --rebase origin main
+            sleep $((RANDOM % 5 + 1))
+          done
+          echo "Push failed after 5 attempts."
+          exit 1
+          
       - name: Fail run if scraper is broken
         # This step exists so the GitHub Actions run shows red whenever the
         # scraper can't recognize the page, even though we wrote the breakage state
