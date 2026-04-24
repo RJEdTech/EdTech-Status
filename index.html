@@ -903,31 +903,47 @@ const VENDORS = [
     extraLink: { label: 'RJ instance uptime', url: 'https://statushistory.instructure.com/rjhs.instructure.com' }
   },
 
-  // ============================================================
-  // CORE (3) — significant impact but not blocking
-  // ============================================================
   {
     // Blackbaud's status page rolls up dozens of components across many products
     // (RE NXT, FE NXT, Luminate, YourCause, etc). The top-level indicator fires
     // when ANY of them is degraded — fine for our purposes since we want
-    // visibility on Education Management (SIS, LMS, Enrollment, Billing, School
-    // Website), Tuition Management, the financial tools, AND the foundational
-    // Blackbaud.com / sign-in / Blackbaud ID layer that affects login.
+    // visibility on Education Management (SIS, the Academic Module / LMS,
+    // Enrollment, Billing, School Website), Tuition Management, the financial
+    // tools, AND the foundational Blackbaud.com / Blackbaud ID layer that
+    // affects login.
     // If we ever want to scope down to specific components, switch to summary.json
     // and filter by component group ID.
+    //
+    // Tier note: Blackbaud is CRITICAL because the Academic Module is the LMS
+    // for the Grade School. An outage during the school day stops Grade School
+    // teaching the same way a Canvas outage stops High School teaching. The
+    // SIS sync to Canvas (high school) is the lower-stakes piece — that runs
+    // overnight and tolerates short outages.
+    //
+    // Hosting note: per Blackbaud's K-12 hosting whitepaper, the K-12 product
+    // line runs on AWS in us-east-1 (3+ availability zones) with Route 53 for
+    // DNS. Authentication is brokered through Blackbaud ID, which runs on
+    // Microsoft's Azure AD B2C platform (the bbid.onmicrosoft.com tenant) and
+    // federates to our Entra ID. So a Blackbaud login failure can originate at
+    // our Entra, at Microsoft's B2C layer, or at Blackbaud's AWS hosting —
+    // check the AWS and Microsoft sign-in tiles when this one is red.
     id: 'blackbaud',
     task: 'teach',
     name: 'Blackbaud',
-    sub: 'SIS, LMS, EMS, financials, ID',
-    tier: 'core',
+    sub: 'SIS, Academic Module (GS LMS), EMS, financials, ID',
+    tier: 'critical',
     type: 'statuspage',
     apiUrl: 'https://status.blackbaud.com/api/v2/status.json',
     summaryUrl: 'https://status.blackbaud.com/api/v2/summary.json',
     pageUrl: 'https://status.blackbaud.com/',
-    whatItDoes: 'Our student information system — enrollment, schedules, GPA, family contacts. Syncs nightly to Canvas.',
-    whenDown: 'Sync to Canvas pauses, and admin tools for grades and rosters become unavailable. Day-to-day teaching is mostly unaffected unless an outage spans days.',
+    whatItDoes: 'Grade School LMS (Academic Module), High School SIS, enrollment, billing, school website. Runs on AWS us-east-1; sign-in is brokered through Blackbaud ID on Azure AD B2C.',
+    whenDown: 'Grade School teaching stops — assignments, grades, and course content go offline. High School SIS admin tools become unavailable, and the nightly sync to Canvas pauses (HS teaching continues unaffected via Canvas itself). If sign-in is the failure mode, check Microsoft sign-in and AWS for an upstream cause.',
     extraLink: { label: 'Uptime history', url: 'https://status.blackbaud.com/uptime' }
   },
+
+  // ============================================================
+  // CORE (3) — significant impact but not blocking
+  // ============================================================
   {
     id: 'vivi',
     task: 'teach',
@@ -1125,12 +1141,12 @@ const VENDORS = [
     id: 'aws',
     task: 'infra',
     name: 'AWS',
-    sub: 'Amazon Web Services — hosts Canvas, NoRedInk, Quizizz, more',
+    sub: 'Amazon Web Services — hosts Canvas, Blackbaud (K-12), NoRedInk, Quizizz, more',
     tier: 'infra',
     type: 'awssnapshot',
     apiUrl: 'aws.json',
     pageUrl: 'https://health.aws.amazon.com/health/status',
-    whatItDoes: 'Amazon\'s cloud — hosts Canvas, NoRedInk, Quizizz, and many other vendors above.',
+    whatItDoes: 'Amazon\'s cloud — hosts Canvas, Blackbaud\'s K-12 products (SIS, Academic Module), NoRedInk, Quizizz, and many other vendors above. Blackbaud\'s K-12 line specifically runs in us-east-1.',
     whenDown: 'Whatever\'s hosted on the affected AWS region goes down with it. This tile is context — check it when a primary tool is also red.'},
   // Cloudflare uses Atlassian Statuspage v2 with a public CORS-enabled API,
   // so we fetch it directly in the browser — no GitHub Action needed. Reuses
@@ -1163,7 +1179,10 @@ const VENDORS = [
 // dependencies they can't back up lose trust fast. NoRedInk's own status
 // page explicitly lists AWS and Cloudflare as external services. Canvas
 // (Instructure) has historically run on AWS with Cloudflare fronting much
-// of its traffic; Quizizz's infrastructure is also AWS-hosted.
+// of its traffic; Quizizz's infrastructure is also AWS-hosted. Blackbaud's
+// own K-12 hosting whitepaper confirms the K-12 product line runs on AWS
+// us-east-1 (3+ availability zones) with Route 53 for DNS — no Cloudflare
+// is documented in the path.
 //
 // Keys are vendor ids (from VENDORS above). Values are arrays of infra
 // vendor ids the service depends on.
@@ -1171,6 +1190,7 @@ const INFRA_DEPENDENCIES = {
   instructure: ['aws', 'cloudflare'],
   noredink: ['aws', 'cloudflare'],
   quizizz: ['aws', 'cloudflare'],
+  blackbaud: ['aws'],
 };
 
 //=============================================================================

@@ -14,17 +14,17 @@ It auto-refreshes every five minutes when the tab is visible and pauses when the
 
 Tools are grouped into four tiers (critical, core, secondary, and supporting infrastructure). The tier drives both the visual size of the tile and how the summary banner weights the tool when something goes wrong.
 
-**Critical (4) — school-day-blocking.** If any of these are down, teaching or operations stop or get severely impaired. Microsoft sign-in (Entra ID) is in this tier because every other Microsoft service plus Canvas, Blackbaud, OneDrive, Teams, and Outlook all depend on it for SSO authentication — if Entra goes down, the cascade hits everything.
+**Critical (5) — school-day-blocking.** If any of these are down, teaching or operations stop or get severely impaired. Microsoft sign-in (Entra ID) is in this tier because every other Microsoft service plus Canvas, Blackbaud, OneDrive, Teams, and Outlook all depend on it for SSO authentication — if Entra goes down, the cascade hits everything. Blackbaud is in this tier because the Academic Module is the LMS for the Grade School — an outage during the school day stops Grade School teaching the same way a Canvas outage stops High School teaching.
 
 - Microsoft sign-in (Entra)
 - OneDrive / SharePoint
 - Exchange / Outlook
 - Canvas
+- Blackbaud (SIS, Academic Module / GS LMS, EMS, financials, ID)
 
-**Core (4) — significant impact when down but not blocking.**
+**Core (3) — significant impact when down but not blocking.**
 
 - Microsoft Teams
-- Blackbaud (SIS, LMS, EMS, financials, ID)
 - Vivi
 - Flint
 
