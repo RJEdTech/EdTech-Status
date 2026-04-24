@@ -28,8 +28,7 @@ jobs:
 
           function fetchUrl(url) {
             return new Promise((resolve, reject) => {
-              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
-                if (res.statusCode !== 200) {
+            https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; rjedtech-status-dashboard/1.0; +https://rjedtech.github.io/EdTech-Status/)' } }, (res) => {
                   reject(new Error('HTTP ' + res.statusCode));
                   return;
                 }
