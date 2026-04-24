@@ -131,8 +131,10 @@ jobs:
 
             try {
               const html = await fetchUrl(PAGE_URL);
+              console.log('HTML length:', html.length);
+              console.log('Contains global_is_operational:', html.includes('global_is_operational'));
               const parsed = parseStatus(html);
-
+              
               const now = new Date().toISOString();
               const newContent = {
                 source: PAGE_URL,
