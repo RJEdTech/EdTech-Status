@@ -144,11 +144,20 @@ jobs:
           git add explorelearning.json
           if git diff --staged --quiet; then
             echo "No changes to commit."
-          else
-            git commit -m "Update ExploreLearning status snapshot [skip ci]"
-            git push
+            exit 0
           fi
-
+          git commit -m "Update ExploreLearning status snapshot [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              echo "Push succeeded on attempt $attempt."
+              exit 0
+            fi
+            echo "Push failed on attempt $attempt — rebasing and retrying..."
+            git pull --rebase origin main
+            sleep $((RANDOM % 5 + 1))
+          done
+          echo "Push failed after 5 attempts."
+          exit 1
       - name: Fail run if scraper is broken
         # This step exists so the GitHub Actions run shows red whenever the
         # scraper can't recognize the page, even though we wrote the breakage state
