@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-04-25T21:54:49.480Z",
+  "fetchedAt": "2026-04-25T23:56:26.972Z",
   "source": "https://status.ixl.com/",
   "severity": "operational",
   "isOperational": true,
@@ -7,6 +7,9 @@
   "isCritical": false,
   "incidentCount": 0,
   "firstIncidentName": "",
-  "parseError": null,
+  "parseError": {
+    "message": "Could not find expected status flags in page HTML — Uptime.com may have changed their page structure.",
+    "firstFailedAt": "2026-04-25T23:56:26.972Z"
+  },
   "lastSuccessfulParse": "2026-04-25T21:54:49.480Z"
 }
