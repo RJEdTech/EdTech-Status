@@ -1,0 +1,227 @@
+name: Fetch RJ Website status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-rj-website:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Synthetic check on regisjesuit.com
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+          const { URL } = require('url');
+
+          // Synthetic check on the public Regis Jesuit website.
+          //
+          // The URL stays the same as RJ's CMS migrates between vendors —
+          // currently Finalsite, eventually Ubiq Education. So this check
+          // monitors "is OUR website up" regardless of which platform is
+          // currently hosting it.
+          //
+          // This is meaningfully different signal from the existing Finalsite
+          // tile: that tile reports Finalsite-the-platform globally; this tile
+          // reports regisjesuit.com specifically. They can diverge.
+          //
+          // Severity ceiling: 'major' (red). Per Jason's call: first
+          // impressions matter for admissions, and a public-facing site
+          // outage during prospective family visits has real consequence
+          // even outside school hours.
+          const TARGET_URL = 'https://www.regisjesuit.com/';
+          const VERIFY_STRING = 'Regis Jesuit';
+          const OUT_PATH = 'rj-website.json';
+          const TIMEOUT_MS = 15000;
+          const MAX_REDIRECTS = 5;
+          const USER_AGENT = 'rjedtech-status-dashboard (https://rjedtech.github.io/EdTech-Status/)';
+
+          // Fetch with redirect following. Returns:
+          //   { ok, status, body, error, redirectChain }
+          function fetchUrl(targetUrl, redirectsRemaining = MAX_REDIRECTS, redirectChain = []) {
+            return new Promise((resolve) => {
+              redirectChain = [...redirectChain, targetUrl];
+              let parsedUrl;
+              try {
+                parsedUrl = new URL(targetUrl);
+              } catch (err) {
+                resolve({ ok: false, status: 0, body: '', error: 'Invalid URL: ' + err.message, redirectChain });
+                return;
+              }
+              const opts = {
+                method: 'GET',
+                headers: {
+                  'User-Agent': USER_AGENT,
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                  'Accept-Language': 'en-US,en;q=0.9'
+                },
+                timeout: TIMEOUT_MS
+              };
+              const req = https.get(parsedUrl, opts, (res) => {
+                if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+                  if (redirectsRemaining <= 0) {
+                    resolve({ ok: false, status: res.statusCode, body: '', error: 'Exceeded max redirects', redirectChain });
+                    return;
+                  }
+                  const location = res.headers.location;
+                  if (!location) {
+                    resolve({ ok: false, status: res.statusCode, body: '', error: 'Redirect with no Location header', redirectChain });
+                    return;
+                  }
+                  const nextUrl = new URL(location, targetUrl).toString();
+                  res.resume();
+                  resolve(fetchUrl(nextUrl, redirectsRemaining - 1, redirectChain));
+                  return;
+                }
+                let body = '';
+                const MAX_BODY = 200000;
+                res.on('data', (chunk) => {
+                  if (body.length < MAX_BODY) {
+                    body += chunk.toString('utf8');
+                    if (body.length > MAX_BODY) body = body.slice(0, MAX_BODY);
+                  }
+                });
+                res.on('end', () => {
+                  resolve({
+                    ok: res.statusCode >= 200 && res.statusCode < 400,
+                    status: res.statusCode,
+                    body, error: null, redirectChain
+                  });
+                });
+              });
+              req.on('error', (err) => resolve({ ok: false, status: 0, body: '', error: err.message, redirectChain }));
+              req.on('timeout', () => req.destroy(new Error('Request timed out after ' + TIMEOUT_MS + 'ms')));
+            });
+          }
+
+          (async () => {
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try { return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8')); } catch (_) { return null; }
+            }
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              if (a.severity !== b.severity) return false;
+              if (a.statusLabel !== b.statusLabel) return false;
+              if (JSON.stringify(a.parseError) !== JSON.stringify(b.parseError)) return false;
+              return true;
+            }
+            const existing = readExisting();
+
+            try {
+              console.log('--- Checking', TARGET_URL);
+              const res = await fetchUrl(TARGET_URL);
+              console.log('  Status:', res.status, 'Redirects:', res.redirectChain.join(' -> '));
+
+              let severity, statusLabel, statusDetail;
+              if (res.error) {
+                severity = 'major';
+                statusLabel = 'Unreachable';
+                statusDetail = res.error;
+              } else if (res.status >= 500) {
+                severity = 'major';
+                statusLabel = 'Server error';
+                statusDetail = 'HTTP ' + res.status;
+              } else if (res.status >= 400) {
+                severity = 'major';
+                statusLabel = 'Site broken';
+                statusDetail = 'HTTP ' + res.status;
+              } else if (!res.body.includes(VERIFY_STRING)) {
+                severity = 'degraded';
+                statusLabel = 'Unexpected page content';
+                statusDetail = 'Expected "' + VERIFY_STRING + '" string missing from response';
+              } else {
+                severity = 'operational';
+                statusLabel = 'Operating normally';
+                statusDetail = null;
+              }
+
+              console.log('--- Severity:', severity, '-', statusLabel);
+
+              const now = new Date().toISOString();
+              const newContent = {
+                source: 'synthetic-check',
+                target: TARGET_URL,
+                severity,
+                statusLabel,
+                statusDetail,
+                parseError: null,
+                lastSuccessfulParse: now
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('No content change — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            } catch (err) {
+              console.error('Workflow harness failed:', err.message);
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: 'synthetic-check',
+                target: TARGET_URL,
+                severity: lastGood.severity || 'unknown',
+                statusLabel: lastGood.statusLabel || null,
+                statusDetail: lastGood.statusDetail || null,
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+              if (contentEqual(newContent, existing)) {
+                console.log('Workflow still failing with same error — skipping write.');
+                return;
+              }
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add rj-website.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Update RJ Website status snapshot [skip ci]"
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "Pushed on attempt $i"
+              exit 0
+            fi
+            echo "Push failed (attempt $i) — pulling and retrying"
+            git pull --rebase origin main
+            sleep $((RANDOM % 5 + 1))
+          done
+          echo "::error::Failed to push after 5 attempts"
+          exit 1
+
+      - name: Fail run if scraper harness is broken
+        run: |
+          if [ -f rj-website.json ] && grep -q '"parseError": {' rj-website.json; then
+            echo "::error::RJ Website scraper harness failed."
+            cat rj-website.json
+            exit 1
+          fi
+          echo "RJ Website scraper succeeded."
