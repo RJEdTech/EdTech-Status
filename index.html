@@ -847,56 +847,22 @@
   </div>
 
   <!-- ================================================================
-       Task-based sections.
-       Each section corresponds to a teaching task. Tools are tagged with
-       a `task` field in the VENDORS array (in the script below). The
-       rendering function reads that field instead of the old `tier`
-       field for layout grouping.
+       Dynamic sections.
+       Sections are now built at render time based on the active audience
+       filter. Each audience (Teaching / Operations / All) gets its own
+       section structure declared in the SECTIONS config in the script
+       below. Tiles are placed into sections by matching their `category`
+       field against each section's `categories` list.
+
+       The `task` field still exists on each vendor for back-compat with
+       legacy CSS selectors and the infra-tile decorator, but section
+       placement is driven by `category` now.
 
        Tier is still used for the summary banner's severity weighting
-       (Canvas-down rings louder than Gimkit-down) — that hasn't changed.
-       What changed is how teachers SEE the tools.
-
-       Sign-in is its own section because when it's down everything
-       cascades — but it's only one tile, so it sits inline above
-       "Teach today" rather than getting its own header.
+       (Canvas-down rings louder than Gimkit-down) — unchanged.
        ================================================================ -->
 
-  <div class="section-label">
-    <span>Sign in &amp; teach today</span>
-    <span class="section-label-note">Everything you need for class to happen</span>
-  </div>
-  <div class="grid grid-task" id="taskGrid-teach"></div>
-
-  <div class="section-label">
-    <span>Email &amp; communication</span>
-    <span class="section-label-note">Outlook and Teams</span>
-  </div>
-  <div class="grid grid-task" id="taskGrid-comm"></div>
-
-  <div class="section-label">
-    <span>Canvas integrations</span>
-    <span class="section-label-note">Tools that plug into Canvas for grading, practice, and assessment</span>
-  </div>
-  <div class="grid grid-task" id="taskGrid-canvas"></div>
-
-  <div class="section-label">
-    <span>Other teaching tools</span>
-    <span class="section-label-note">General-purpose tools some teachers use</span>
-  </div>
-  <div class="grid grid-task" id="taskGrid-other"></div>
-
-  <div class="section-label">
-    <span>Operations</span>
-    <span class="section-label-note">Public website, athletics, and other institutional systems</span>
-  </div>
-  <div class="grid grid-task" id="taskGrid-operations"></div>
-
-  <div class="section-label">
-    <span>Behind the scenes</span>
-    <span class="section-label-note">Infrastructure that runs the tools above — only matters if those go red too</span>
-  </div>
-  <div class="grid grid-task" id="taskGrid-infra"></div>
+  <div id="dynamicSections"></div>
 
   <footer class="page-foot">
     <p><strong>How to use this page.</strong> Before troubleshooting a tool that isn't working, glance here. If the tile is red or yellow, the vendor is reporting a known issue — it's not just you. If the tile is green and you're still having trouble, the problem is real; status pages can lag actual outages by 30 minutes or more.</p>
@@ -947,6 +913,80 @@
 // browser fetches. The GitHub Actions RSS scrape we tried also proved fragile.
 // We surface a single combined Microsoft 365 tile that links to the M365
 // status page for manual checking.
+// =============================================================================
+// SECTIONS CONFIG — per-audience section structure
+// =============================================================================
+// Each audience view gets its own ordered list of sections. Each section
+// declares which categories of vendor it pulls. The render logic looks up
+// the active audience, builds those sections dynamically, and places each
+// vendor (matched by its `category` field) into the right one.
+//
+// Categories are short tokens describing what the vendor IS (signin,
+// lms-core, public-site, athletics, etc.). The same category can map
+// to a different section name under different audience views — e.g.
+// `signin` lands in "Sign in & teach today" for teachers and "Daily
+// systems" for operations. That's the whole point of this structure.
+//
+// The 'all' view uses the teaching section structure as-is, plus an
+// "Operations" catchall section at the bottom for tiles that don't
+// belong in any teaching section. This preserves how 'all' looked
+// before this refactor.
+//
+// Vendors that match no section in the current audience just don't
+// render. A vendor with audience `['operations']` won't have a section
+// to land in under teaching view — that's correct behavior, and the
+// audience filter on the vendor itself enforces it as a second layer.
+const SECTIONS = {
+  teaching: [
+    { id: 'teach',      label: 'Sign in & teach today', note: 'Everything you need for class to happen', categories: ['signin', 'lms-core', 'display', 'ai-tutoring'] },
+    { id: 'comm',       label: 'Email & communication', note: 'Outlook and Teams', categories: ['email-comm'] },
+    { id: 'canvas',     label: 'Canvas integrations',   note: 'Tools that plug into Canvas for grading, practice, and assessment', categories: ['quiz-proctoring', 'plagiarism', 'analytics', 'practice-content', 'engagement-canvas'] },
+    { id: 'other',      label: 'Other teaching tools',  note: 'General-purpose tools some teachers use', categories: ['engagement-standalone'] },
+    { id: 'operations', label: 'Operations',            note: 'Public website, athletics, and other institutional systems', categories: ['public-site', 'athletics'] },
+    { id: 'infra',      label: 'Behind the scenes',     note: 'Infrastructure that runs the tools above — only matters if those go red too', categories: ['vendor-platform', 'infra'] }
+  ],
+  operations: [
+    { id: 'daily',          label: 'Daily systems',     note: 'Sign-in and platforms used every day', categories: ['signin', 'lms-core'] },
+    { id: 'public',         label: 'Public-facing',     note: 'External websites and services', categories: ['public-site'] },
+    { id: 'athletics',      label: 'Athletics',         note: 'Athletic department systems', categories: ['athletics'] },
+    { id: 'vendor-platforms', label: 'Vendor platforms', note: 'Underlying platforms that power the systems above', categories: ['vendor-platform'] },
+    { id: 'infra',          label: 'Behind the scenes', note: 'Infrastructure that the platforms above run on', categories: ['infra'] }
+  ],
+  // 'all' uses teaching sections + an operations catchall. Built dynamically
+  // in getSectionsForAudience() rather than declared here, because we want
+  // the catchall to include exactly the tiles that don't fit anywhere in
+  // the teaching structure — a calculation that depends on the actual
+  // VENDORS array.
+};
+
+// Resolve which section list to use for a given audience. Returns an
+// array of {id, label, note, categories} section descriptors. For 'all',
+// builds a synthetic list: teaching sections + a final "Operations" section
+// containing any vendor whose category doesn't fit a teaching section.
+function getSectionsForAudience(audience) {
+  if (audience === 'teaching' || audience === 'operations') {
+    return SECTIONS[audience];
+  }
+  // 'all' (default for first-time visitors)
+  const teachingSections = SECTIONS.teaching;
+  const teachingCategories = new Set(teachingSections.flatMap(s => s.categories));
+
+  // Find categories that exist in VENDORS but aren't covered by any teaching section
+  const allCategories = new Set(VENDORS.map(v => v.category).filter(Boolean));
+  const operationsOnlyCategories = [...allCategories].filter(c => !teachingCategories.has(c));
+
+  // If there are any orphan categories, append an Operations catchall.
+  // Otherwise just use teaching sections as-is.
+  if (operationsOnlyCategories.length === 0) {
+    return teachingSections;
+  }
+  return [
+    ...teachingSections,
+    { id: 'operations-all', label: 'Operations', note: 'Public website, athletics, and other institutional systems',
+      categories: operationsOnlyCategories }
+  ];
+}
+
 const VENDORS = [
   // ============================================================
   // CRITICAL (2) — school-day-blocking
@@ -954,6 +994,7 @@ const VENDORS = [
   {
     id: 'm365',
     task: 'teach',
+    category: 'signin',
     name: 'Microsoft 365',
     sub: 'Sign-in, OneDrive/SharePoint, Outlook, Teams — manual check',
     tier: 'critical',
@@ -965,6 +1006,7 @@ const VENDORS = [
   {
     id: 'instructure',
     task: 'teach',
+    category: 'lms-core',
     name: 'Canvas',
     sub: 'Instructure — global status',
     tier: 'critical',
@@ -1004,16 +1046,17 @@ const VENDORS = [
     // check the AWS and Microsoft sign-in tiles when this one is red.
     id: 'blackbaud',
     task: 'teach',
+    category: 'vendor-platform',
     name: 'Blackbaud',
-    sub: 'SIS, Academic Module (GS LMS), EMS, financials, ID',
+    sub: 'Underlying platform — SIS, LMS, financials, advancement',
     tier: 'critical',
     audience: ['teaching', 'operations'],
     type: 'statuspage',
     apiUrl: 'https://status.blackbaud.com/api/v2/status.json',
     summaryUrl: 'https://status.blackbaud.com/api/v2/summary.json',
     pageUrl: 'https://status.blackbaud.com/',
-    whatItDoes: 'Grade School LMS (Academic Module), High School SIS, enrollment, billing, school website. Runs on AWS us-east-1; sign-in is brokered through Blackbaud ID on Azure AD B2C.',
-    whenDown: 'Grade School teaching stops — assignments, grades, and course content go offline. High School SIS admin tools become unavailable, and the nightly sync to Canvas pauses (HS teaching continues unaffected via Canvas itself). If sign-in is the failure mode, check Microsoft sign-in and AWS for an upstream cause.',
+    whatItDoes: 'The vendor platform that powers MyRJ (faculty login, attendance, grades, GS LMS), the High School SIS, enrollment, billing, financials, and advancement/fundraising. Reports global Blackbaud platform health — the MyRJ tile reports our specific tenant. Runs on AWS us-east-1; sign-in is brokered through Blackbaud ID on Azure AD B2C.',
+    whenDown: 'When this tile is red, expect MyRJ and SIS-dependent workflows to be affected, and Blackbaud-dependent business systems (financials, advancement) may also be impaired. The MyRJ tile may show issues simultaneously. If sign-in is the failure mode, check Microsoft sign-in and AWS for an upstream cause.',
     extraLink: { label: 'Uptime history', url: 'https://status.blackbaud.com/uptime' }
   },
 
@@ -1023,6 +1066,7 @@ const VENDORS = [
   {
     id: 'vivi',
     task: 'teach',
+    category: 'display',
     name: 'Vivi',
     sub: 'Wireless display & screen mirroring',
     tier: 'core',
@@ -1038,6 +1082,7 @@ const VENDORS = [
   {
     id: 'flint',
     task: 'teach',
+    category: 'ai-tutoring',
     name: 'Flint',
     sub: 'flintk12.com',
     tier: 'core',
@@ -1057,6 +1102,7 @@ const VENDORS = [
   {
     id: 'respondus',
     task: 'canvas',
+    category: 'quiz-proctoring',
     name: 'LockDown Browser',
     sub: 'Respondus — secure exam browser',
     tier: 'core',
@@ -1072,6 +1118,7 @@ const VENDORS = [
   {
     id: 'copyleaks',
     task: 'canvas',
+    category: 'plagiarism',
     name: 'Copyleaks',
     sub: 'AI detection & plagiarism',
     tier: 'secondary',
@@ -1084,6 +1131,7 @@ const VENDORS = [
   {
     id: 'aspiredu',
     task: 'canvas',
+    category: 'analytics',
     name: 'Grade Guardian',
     sub: 'AspirEDU — student progress monitoring',
     tier: 'secondary',
@@ -1097,6 +1145,7 @@ const VENDORS = [
   {
     id: 'explorelearning',
     task: 'canvas',
+    category: 'practice-content',
     name: 'Gizmos',
     sub: 'ExploreLearning — Gizmos, Reflex, Frax',
     tier: 'secondary',
@@ -1111,6 +1160,7 @@ const VENDORS = [
   {
     id: 'ixl',
     task: 'canvas',
+    category: 'practice-content',
     name: 'IXL',
     sub: 'status.ixl.com',
     tier: 'secondary',
@@ -1123,6 +1173,7 @@ const VENDORS = [
   {
     id: 'kahoot',
     task: 'other',
+    category: 'engagement-standalone',
     name: 'Kahoot',
     sub: 'Game-based learning',
     tier: 'secondary',
@@ -1140,6 +1191,7 @@ const VENDORS = [
   {
     id: 'quizizz',
     task: 'other',
+    category: 'engagement-standalone',
     name: 'Quizizz',
     sub: 'Now branded "Wayground"',
     tier: 'secondary',
@@ -1154,6 +1206,7 @@ const VENDORS = [
   {
     id: 'gimkit',
     task: 'canvas',
+    category: 'engagement-canvas',
     name: 'Gimkit',
     sub: 'Game-based learning & 2D modes',
     tier: 'secondary',
@@ -1168,6 +1221,7 @@ const VENDORS = [
   {
     id: 'soundtrap',
     task: 'canvas',
+    category: 'engagement-canvas',
     name: 'Soundtrap',
     sub: 'Music creation & podcasting',
     tier: 'secondary',
@@ -1183,6 +1237,7 @@ const VENDORS = [
   {
     id: 'noredink',
     task: 'canvas',
+    category: 'practice-content',
     name: 'NoRedInk',
     sub: 'Grammar & writing practice',
     tier: 'secondary',
@@ -1199,6 +1254,7 @@ const VENDORS = [
   {
     id: 'deltamath',
     task: 'canvas',
+    category: 'practice-content',
     name: 'DeltaMath',
     sub: 'status.deltamath.com',
     tier: 'secondary',
@@ -1229,10 +1285,11 @@ const VENDORS = [
   {
     id: 'aws',
     task: 'infra',
+    category: 'infra',
     name: 'AWS',
     sub: 'Amazon Web Services — hosts Canvas, Blackbaud (K-12), NoRedInk, Quizizz, more',
     tier: 'infra',
-    audience: ['infra'],
+    audience: ['teaching', 'operations'],
     type: 'awssnapshot',
     apiUrl: 'aws.json',
     pageUrl: 'https://health.aws.amazon.com/health/status',
@@ -1244,10 +1301,11 @@ const VENDORS = [
   {
     id: 'cloudflare',
     task: 'infra',
+    category: 'infra',
     name: 'Cloudflare',
     sub: 'Fronts many of our vendor sites',
     tier: 'infra',
-    audience: ['infra'],
+    audience: ['teaching', 'operations'],
     type: 'statuspage',
     apiUrl: 'https://www.cloudflarestatus.com/api/v2/status.json',
     summaryUrl: 'https://www.cloudflarestatus.com/api/v2/summary.json',
@@ -1264,6 +1322,7 @@ const VENDORS = [
   {
     id: 'finalsite',
     task: 'operations',
+    category: 'public-site',
     name: 'Finalsite',
     sub: 'Public RJ website CMS',
     tier: 'secondary',
@@ -1286,6 +1345,7 @@ const VENDORS = [
   {
     id: 'arbitersports',
     task: 'operations',
+    category: 'athletics',
     name: 'ArbiterSports',
     sub: 'Athletics scheduling — synthetic reachability check',
     tier: 'secondary',
@@ -1309,6 +1369,7 @@ const VENDORS = [
   {
     id: 'rj-website',
     task: 'operations',
+    category: 'public-site',
     name: 'RJ Website',
     sub: 'regisjesuit.com — synthetic reachability check',
     tier: 'core',
@@ -1334,7 +1395,8 @@ const VENDORS = [
   // not a stoppage.
   {
     id: 'myrj',
-    task: 'operations',
+    task: 'teach',
+    category: 'lms-core',
     name: 'MyRJ',
     sub: 'Faculty login flow — synthetic check',
     tier: 'core',
@@ -2791,23 +2853,36 @@ function renderPlainBanner(results) {
 }
 
 //=============================================================================
-// RENDER ALL TILES — task-based grouping
+// RENDER ALL TILES — dynamic sections per audience
 //=============================================================================
-// Tiles render into per-task grids. Empty sections (no vendors with that
-// task — shouldn't happen with current config, but safe) hide their header
-// and grid via .is-empty.
+// Builds the section structure dynamically from the SECTIONS config based on
+// the currently-active audience filter. Each section's tiles are determined
+// by matching their `category` field against the section's declared
+// categories.
 //
 // Within each section: tiles with active issues sort to the top, then
 // breakage/unknown, then operational. Inside the operational group we
 // alpha-sort by name so layout is stable across refreshes.
+//
+// Tile audience (the `audience` array on each vendor) acts as a second
+// filter on top of category-based section placement. A vendor whose
+// audience doesn't include the current view is skipped entirely. This
+// matters for tiles like Vivi (teaching only — won't appear in operations
+// view even if its category somehow matched a section).
 function renderAll(results) {
   // Render banner first so window.__currentCorrelations is populated for
   // infra tile decoration below.
   renderPlainBanner(results);
   const correlations = window.__currentCorrelations || [];
 
-  // Sort within each task group: incidents first (worst on top), then
-  // operational/unknown. Same per-section logic the old code used per-tier.
+  const audience = getStoredAudience();
+  const sections = getSectionsForAudience(audience);
+  const container = document.getElementById('dynamicSections');
+  if (!container) return;
+  container.innerHTML = '';
+
+  // Sort within each section: incidents first (worst on top), then
+  // operational/unknown.
   const sortByIncident = (a, b) => {
     const ra = results[a.id] ? severityRank(results[a.id].severity) : -1;
     const rb = results[b.id] ? severityRank(results[b.id].severity) : -1;
@@ -2815,47 +2890,57 @@ function renderAll(results) {
     return a.name.localeCompare(b.name);
   };
 
-  // Discover all task buckets — union of (a) tasks present in VENDORS and
-  // (b) taskGrid-* elements present in the markup. Including the markup side
-  // matters when a section's only vendors have been removed: without the DOM
-  // sweep, the loop would never visit that grid and it would render as a
-  // visible-but-empty section instead of being hidden by .is-empty.
-  const vendorTasks = VENDORS.map(v => v.task).filter(Boolean);
-  const domTasks = [...document.querySelectorAll('[id^="taskGrid-"]')]
-    .map(el => el.id.replace(/^taskGrid-/, ''));
-  const tasks = [...new Set([...vendorTasks, ...domTasks])];
+  for (const section of sections) {
+    // Find vendors whose category matches this section AND whose audience
+    // includes the active view. The audience check is the second filter:
+    // even if a category matches, vendors not visible to this audience
+    // are excluded.
+    const sectionVendors = VENDORS
+      .filter(v => section.categories.includes(v.category))
+      .filter(v => audience === 'all' || (v.audience || []).includes(audience))
+      .sort(sortByIncident);
 
-  for (const task of tasks) {
-    const grid = document.getElementById('taskGrid-' + task);
-    if (!grid) continue;  // markup doesn't have this task — ignore silently
-    grid.innerHTML = '';
-    grid.classList.remove('is-empty');
+    // Build the section header. Always include it in the DOM so
+    // structure is consistent across audience changes; if there are
+    // no vendors, the header gets .is-empty and CSS hides it.
+    const header = document.createElement('div');
+    header.className = 'section-label';
+    const title = document.createElement('span');
+    title.textContent = section.label;
+    header.appendChild(title);
+    if (section.note) {
+      const note = document.createElement('span');
+      note.className = 'section-label-note';
+      note.textContent = section.note;
+      header.appendChild(note);
+    }
 
-    const taskVendors = VENDORS.filter(v => v.task === task).sort(sortByIncident);
-    if (taskVendors.length === 0) {
-      // Hide the section header too. Headers sit immediately before each
-      // grid in markup, so previousElementSibling is the .section-label.
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-task';
+    grid.id = 'taskGrid-' + section.id;
+
+    if (sectionVendors.length === 0) {
+      header.classList.add('is-empty');
       grid.classList.add('is-empty');
-      const header = grid.previousElementSibling;
-      if (header && header.classList.contains('section-label')) {
-        header.classList.add('is-empty');
+    } else {
+      for (const v of sectionVendors) {
+        const tile = renderTile(v, results[v.id]);
+        // Infra tiles get the depends-on annotation. Decorator runs on
+        // any tile in a section whose categories include 'infra' — same
+        // logic as before, just gated by category instead of task.
+        if (v.category === 'infra') {
+          decorateInfraTile(tile, v, results, correlations);
+        }
+        grid.appendChild(tile);
       }
-      continue;
     }
 
-    for (const v of taskVendors) {
-      const tile = renderTile(v, results[v.id]);
-      // Infra tiles get the depends-on annotation. Same decorator the old
-      // code used; we just call it for any tile in the infra section.
-      if (v.task === 'infra') {
-        decorateInfraTile(tile, v, results, correlations);
-      }
-      grid.appendChild(tile);
-    }
+    container.appendChild(header);
+    container.appendChild(grid);
   }
 
-  // Also handle any link-only vendors (none today, but the renderer is
-  // defensive — if linkOnlyGrid existed in markup it would render here).
+  // Also handle any link-only vendors. The link-only grid lives outside
+  // the dynamic section container (it's a sibling in markup if present).
   const linkGrid = document.getElementById('linkOnlyGrid');
   if (linkGrid) {
     linkGrid.innerHTML = '';
@@ -2945,18 +3030,18 @@ async function refreshAll() {
   const cache = loadCache();
   const results = {};
 
-  // Initial render with cached values so the UI isn't blank during fetch
+  // Initial render with cached values so the UI isn't blank during fetch.
+  // renderAll reads the active audience from storage internally, so the
+  // section structure is correct on first paint.
   for (const v of VENDORS) {
     if (v.type === 'linkonly') continue;
     if (cache[v.id]) {
       results[v.id] = { ...cache[v.id], cached: true };
     }
   }
-  renderAll(results);
   lastResults = results;
-  if (typeof applyAudienceFilter === 'function') {
-    applyAudienceFilter(getStoredAudience());
-  }
+  renderAll(results);
+  syncAudienceButtonState();
 
   // Fetch each in parallel, update tiles as they complete
   const promises = VENDORS
@@ -2980,15 +3065,23 @@ async function refreshAll() {
   await Promise.all(promises);
 
   saveCache(cache);
-  renderAll(results);
   lastResults = results;
-  if (typeof applyAudienceFilter === 'function') {
-    applyAudienceFilter(getStoredAudience());
-  }
+  renderAll(results);
+  syncAudienceButtonState();
 
   const now = new Date();
   lastEl.textContent = 'Last checked: ' + formatClockTime(now);
   btn.disabled = false;
+}
+
+// Mark the audience button matching current storage as active. Pulled out
+// as a small helper so refreshAll doesn't have to re-call applyAudienceFilter
+// (which would trigger an extra renderAll) just to update button state.
+function syncAudienceButtonState() {
+  const audience = getStoredAudience();
+  document.querySelectorAll('.audience-btn').forEach(btn => {
+    btn.classList.toggle('is-active', btn.dataset.audience === audience);
+  });
 }
 
 document.getElementById('refreshBtn').addEventListener('click', () => {
@@ -3038,10 +3131,14 @@ document.getElementById('copyLinkBtn').addEventListener('click', async (e) => {
 // AUDIENCE FILTER
 //=============================================================================
 // Three-button toggle (All / Teaching / Operations) above the first section.
-// Each vendor in VENDORS has an `audience` array; tiles whose audience array
-// doesn't include the selected view get .is-audience-hidden, which hides
-// them via display:none. Sections that end up with zero visible tiles
-// collapse via the existing .is-empty CSS path.
+// Switching audience triggers a full re-render via renderAll(), which
+// rebuilds the section structure from SECTIONS[audience]. Sections, their
+// labels, and which tiles land where can all differ per audience — see
+// the SECTIONS config near the top of the script.
+//
+// Tile audience (the `audience` array on each vendor) acts as a second
+// filter on top of category-based section placement: a vendor whose
+// audience doesn't include the active view is skipped entirely.
 //
 // Selection persists in localStorage per-browser. First-time visitors land
 // on "All" (no preference saved) — invites them to scope down to their role.
@@ -3065,46 +3162,27 @@ function setStoredAudience(audience) {
 }
 
 function applyAudienceFilter(audience) {
+  // Persist selection
+  setStoredAudience(audience);
+
   // Update button active state
   document.querySelectorAll('.audience-btn').forEach(btn => {
     btn.classList.toggle('is-active', btn.dataset.audience === audience);
   });
 
-  // Show/hide tiles based on each vendor's audience array
-  document.querySelectorAll('[data-vendor-id]').forEach(tile => {
-    const vendorId = tile.dataset.vendorId;
-    const vendor = VENDORS.find(v => v.id === vendorId);
-    if (!vendor) return;
-    const matches = audience === 'all' || (vendor.audience || []).includes(audience);
-    tile.classList.toggle('is-audience-hidden', !matches);
-  });
-
-  // Collapse sections that have no visible tiles. We can't reuse the existing
-  // .is-empty path here because the tiles are still in the DOM (just hidden),
-  // so we count visible tiles per section ourselves.
-  document.querySelectorAll('.grid-task').forEach(grid => {
-    const visibleTiles = grid.querySelectorAll('.tile:not(.is-audience-hidden)');
-    const isEmpty = visibleTiles.length === 0;
-    grid.classList.toggle('is-empty', isEmpty);
-    const header = grid.previousElementSibling;
-    if (header && header.classList.contains('section-label')) {
-      header.classList.toggle('is-empty', isEmpty);
-    }
-  });
-
-  // Re-render the banner so its counts match the visible tiles. lastResults
+  // Re-render the entire page using the new audience's section structure.
+  // We don't just toggle visibility classes anymore — sections themselves
+  // are different per audience, so a full re-render is required. lastResults
   // is set by refreshAll() and holds the most recent fetch results.
   if (lastResults) {
-    renderPlainBanner(lastResults);
+    renderAll(lastResults);
   }
 }
 
 // Wire up button clicks
 document.querySelectorAll('.audience-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    const audience = btn.dataset.audience;
-    setStoredAudience(audience);
-    applyAudienceFilter(audience);
+    applyAudienceFilter(btn.dataset.audience);
   });
 });
 
