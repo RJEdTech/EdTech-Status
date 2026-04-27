@@ -387,6 +387,46 @@
   #taskGrid-infra { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 
   /* ======================================================================
+     AUDIENCE FILTER — All / Teaching / Operations toggle
+     ----------------------------------------------------------------------
+     Three buttons sit just above the first section. Active state mirrors
+     the dashboard's red accent. The filter hides individual tiles whose
+     audience array doesn't include the selected view; sections that end
+     up with all tiles hidden then collapse via the existing .is-empty
+     CSS path. Selection persists per-browser via localStorage.
+     ====================================================================== */
+  .audience-toggle {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin: 16px 0 24px;
+    flex-wrap: wrap;
+  }
+  .audience-btn {
+    padding: 8px 18px;
+    background: var(--surface);
+    color: var(--ink-dim);
+    border: 1px solid var(--border-mid);
+    border-radius: 6px;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .audience-btn:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+    color: var(--ink);
+  }
+  .audience-btn.is-active {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+  }
+  /* Hidden tiles still occupy zero space — display:none keeps the grid clean. */
+  .tile.is-audience-hidden { display: none; }
+
+  /* ======================================================================
      TILES
      ----------------------------------------------------------------------
      Tiles use plain surface backgrounds and a subtle border. Severity is
@@ -779,6 +819,16 @@
     </div>
   </div>
 
+  <!-- Audience filter. Lets a viewer scope the dashboard to their role:
+       teaching tools, operations tools, or everything. Default on first
+       visit is "All" so users see the full picture and can opt in to a
+       narrower view. Selection persists per-browser via localStorage. -->
+  <div class="audience-toggle" role="group" aria-label="Audience filter">
+    <button type="button" class="audience-btn" data-audience="all">All</button>
+    <button type="button" class="audience-btn" data-audience="teaching">Teaching</button>
+    <button type="button" class="audience-btn" data-audience="operations">Operations</button>
+  </div>
+
   <!-- ================================================================
        Task-based sections.
        Each section corresponds to a teaching task. Tools are tagged with
@@ -818,6 +868,12 @@
     <span class="section-label-note">General-purpose tools some teachers use</span>
   </div>
   <div class="grid grid-task" id="taskGrid-other"></div>
+
+  <div class="section-label">
+    <span>Operations</span>
+    <span class="section-label-note">Public website, athletics, and other institutional systems</span>
+  </div>
+  <div class="grid grid-task" id="taskGrid-operations"></div>
 
   <div class="section-label">
     <span>Behind the scenes</span>
@@ -884,6 +940,7 @@ const VENDORS = [
     name: 'Microsoft 365',
     sub: 'Sign-in, OneDrive/SharePoint, Outlook, Teams — manual check',
     tier: 'critical',
+    audience: ['teaching', 'operations'],
     type: 'linkonly',
     pageUrl: 'https://status.cloud.microsoft/',
     whatItDoes: 'Microsoft\'s full suite — sign-in (Entra), email (Outlook), files (OneDrive/SharePoint), and Teams. Sign-in is the foundation everything else rides on.',
@@ -894,6 +951,7 @@ const VENDORS = [
     name: 'Canvas',
     sub: 'Instructure — global status',
     tier: 'critical',
+    audience: ['teaching'],
     type: 'statuspage',
     apiUrl: 'https://status.instructure.com/api/v2/status.json',
     summaryUrl: 'https://status.instructure.com/api/v2/summary.json',
@@ -932,6 +990,7 @@ const VENDORS = [
     name: 'Blackbaud',
     sub: 'SIS, Academic Module (GS LMS), EMS, financials, ID',
     tier: 'critical',
+    audience: ['teaching', 'operations'],
     type: 'statuspage',
     apiUrl: 'https://status.blackbaud.com/api/v2/status.json',
     summaryUrl: 'https://status.blackbaud.com/api/v2/summary.json',
@@ -950,6 +1009,7 @@ const VENDORS = [
     name: 'Vivi',
     sub: 'Wireless display & screen mirroring',
     tier: 'core',
+    audience: ['teaching'],
     type: 'statuspage',
     apiUrl: 'https://status.vivi.io/api/v2/status.json',
     summaryUrl: 'https://status.vivi.io/api/v2/summary.json',
@@ -964,6 +1024,7 @@ const VENDORS = [
     name: 'Flint',
     sub: 'flintk12.com',
     tier: 'core',
+    audience: ['teaching'],
     type: 'statuspage',
     apiUrl: 'https://status.flintk12.com/api/v2/status.json',
     summaryUrl: 'https://status.flintk12.com/api/v2/summary.json',
@@ -981,7 +1042,8 @@ const VENDORS = [
     task: 'canvas',
     name: 'LockDown Browser',
     sub: 'Respondus — secure exam browser',
-    tier: 'secondary',
+    tier: 'core',
+    audience: ['teaching'],
     type: 'statuspage',
     apiUrl: 'https://status.respondus.com/api/v2/status.json',
     summaryUrl: 'https://status.respondus.com/api/v2/summary.json',
@@ -996,6 +1058,7 @@ const VENDORS = [
     name: 'Copyleaks',
     sub: 'AI detection & plagiarism',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'instatus',
     apiUrl: 'https://status.copyleaks.com/summary.json',
     pageUrl: 'https://status.copyleaks.com/',
@@ -1007,6 +1070,7 @@ const VENDORS = [
     name: 'Grade Guardian',
     sub: 'AspirEDU — student progress monitoring',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'statuspage',
     apiUrl: 'https://aspiredu.statuspage.io/api/v2/status.json',
     summaryUrl: 'https://aspiredu.statuspage.io/api/v2/summary.json',
@@ -1019,6 +1083,7 @@ const VENDORS = [
     name: 'Gizmos',
     sub: 'ExploreLearning — Gizmos, Reflex, Frax',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'elsnapshot',
     apiUrl: 'explorelearning.json',
     pageUrl: 'https://www.explorelearning.com/our-products/site-status',
@@ -1032,6 +1097,7 @@ const VENDORS = [
     name: 'IXL',
     sub: 'status.ixl.com',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'ixlsnapshot',
     apiUrl: 'ixl.json',
     pageUrl: 'https://status.ixl.com/',
@@ -1043,6 +1109,7 @@ const VENDORS = [
     name: 'Kahoot',
     sub: 'Game-based learning',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'statuspage',
     apiUrl: 'https://status.kahoot.com/api/v2/status.json',
     summaryUrl: 'https://status.kahoot.com/api/v2/summary.json',
@@ -1059,6 +1126,7 @@ const VENDORS = [
     name: 'Quizizz',
     sub: 'Now branded "Wayground"',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'quizizzsnapshot',
     apiUrl: 'quizizz.json',
     pageUrl: 'https://statuspage.freshping.io/621-QuizizzStatusPage/',
@@ -1072,6 +1140,7 @@ const VENDORS = [
     name: 'Gimkit',
     sub: 'Game-based learning & 2D modes',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'gimkitsnapshot',
     apiUrl: 'gimkit.json',
     pageUrl: 'https://gimkit.crisp.watch/en/',
@@ -1085,6 +1154,7 @@ const VENDORS = [
     name: 'Soundtrap',
     sub: 'Music creation & podcasting',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'soundtrapsnapshot',
     apiUrl: 'soundtrap.json',
     pageUrl: 'https://status.soundtrap.com/',
@@ -1099,6 +1169,7 @@ const VENDORS = [
     name: 'NoRedInk',
     sub: 'Grammar & writing practice',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'noredinksnapshot',
     apiUrl: 'noredink.json',
     pageUrl: 'https://noredinkstatus.com/',
@@ -1114,6 +1185,7 @@ const VENDORS = [
     name: 'DeltaMath',
     sub: 'status.deltamath.com',
     tier: 'secondary',
+    audience: ['teaching'],
     type: 'statuspage',
     apiUrl: 'https://status.deltamath.com/api/v2/status.json',
     summaryUrl: 'https://status.deltamath.com/api/v2/summary.json',
@@ -1143,6 +1215,7 @@ const VENDORS = [
     name: 'AWS',
     sub: 'Amazon Web Services — hosts Canvas, Blackbaud (K-12), NoRedInk, Quizizz, more',
     tier: 'infra',
+    audience: ['infra'],
     type: 'awssnapshot',
     apiUrl: 'aws.json',
     pageUrl: 'https://health.aws.amazon.com/health/status',
@@ -1157,12 +1230,54 @@ const VENDORS = [
     name: 'Cloudflare',
     sub: 'Fronts many of our vendor sites',
     tier: 'infra',
+    audience: ['infra'],
     type: 'statuspage',
     apiUrl: 'https://www.cloudflarestatus.com/api/v2/status.json',
     summaryUrl: 'https://www.cloudflarestatus.com/api/v2/summary.json',
     pageUrl: 'https://www.cloudflarestatus.com/',
     whatItDoes: 'Routes and protects traffic for many vendor sites — sits between us and them.',
-    whenDown: 'Vendors fronted by Cloudflare may become unreachable, slow, or throw errors. Like AWS, this is context — check it when a primary tool is also red.'}
+    whenDown: 'Vendors fronted by Cloudflare may become unreachable, slow, or throw errors. Like AWS, this is context — check it when a primary tool is also red.'},
+
+  // ============================================================
+  // OPERATIONS — institutional systems beyond the classroom
+  // ============================================================
+  // These tiles aren't directly classroom-facing but matter to operations
+  // (admissions, communications, athletics). They render under the new
+  // Operations section and only appear in the All or Operations audience views.
+  {
+    id: 'finalsite',
+    task: 'operations',
+    name: 'Finalsite',
+    sub: 'Public RJ website CMS',
+    tier: 'secondary',
+    audience: ['operations'],
+    type: 'statuspage',
+    apiUrl: 'https://status.finalsite.com/api/v2/status.json',
+    summaryUrl: 'https://status.finalsite.com/api/v2/summary.json',
+    pageUrl: 'https://status.finalsite.com/',
+    whatItDoes: 'Hosts and serves the public regisjesuit.com website — admissions pages, news, calendar, athletics info.',
+    whenDown: 'Public-facing site may be slow or unreachable; existing visitors lose access to admissions forms, news, and event listings. Internal teaching tools are unaffected.'
+  },
+  // ArbiterSports doesn't publish its own status page — we scrape Downdetector,
+  // which aggregates user-reported issues. That's a weaker signal than the other
+  // tiles on this dashboard (it tells us "users are complaining," not "the vendor
+  // is reporting an issue"), so expect a higher false-positive rate. The scraper
+  // (fetch-arbitersports.yml) reads the inline JSON status field from the rendered
+  // Downdetector HTML and writes arbitersports.json. Until that workflow is built,
+  // this tile will show "unknown" or breakage — that's expected.
+  {
+    id: 'arbitersports',
+    task: 'operations',
+    name: 'ArbiterSports',
+    sub: 'Athletics scheduling — Downdetector signal',
+    tier: 'secondary',
+    audience: ['operations'],
+    type: 'arbitersnapshot',
+    apiUrl: 'arbitersports.json',
+    pageUrl: 'https://downdetector.com/status/arbitersports/',
+    whatItDoes: 'Athletic event management — schedules officials, payments, and game assignments. Used by the athletic department.',
+    whenDown: 'Game scheduling and official assignments may be delayed; classroom teaching unaffected.'
+  }
 ];
 
 //=============================================================================
@@ -1199,6 +1314,9 @@ const INFRA_DEPENDENCIES = {
 const STORAGE_KEY = 'edtech-status-cache-v1';
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 let refreshTimer = null;
+// Most recent fetch results, kept module-level so the audience filter can
+// re-render the banner after a toggle without triggering a new fetch.
+let lastResults = null;
 
 //=============================================================================
 // FETCHERS
@@ -1801,6 +1919,76 @@ async function fetchNoRedInk(vendor) {
   };
 }
 
+// ArbiterSports snapshot file:
+//   Written by the .github/workflows/fetch-arbitersports.yml workflow every
+//   5 minutes. Same-origin fetch, so no CORS issues.
+//
+//   ArbiterSports doesn't publish its own status page, so we scrape
+//   Downdetector — a CROWDSOURCED signal that tracks user complaints rather
+//   than vendor-reported issues. Expect a higher false-positive rate than
+//   other tiles. The workflow extracts companyCurrentStatus from Downdetector's
+//   server-rendered Next.js data and maps to one of:
+//     'operational' | 'degraded' | 'partial'
+//   (We deliberately don't map to 'major' even on Downdetector's "danger"
+//   state — crowdsourced data shouldn't ring the same alarm as a vendor
+//   confirming a major outage.)
+async function fetchArbiterSports(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'Downdetector page',
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  const severity = data.severity || 'operational';
+
+  let statusText;
+  let incident = null;
+
+  switch (severity) {
+    case 'operational':
+      statusText = 'No user-reported problems';
+      break;
+    case 'degraded':
+      // Downdetector's "warning" state — possible problems based on report
+      // volume. Phrase this carefully so faculty don't read crowdsourced
+      // signal as confirmed outage.
+      statusText = 'Possible issues — user reports elevated';
+      incident = {
+        name: 'Users reporting potential issues on Downdetector',
+        status: 'Crowdsourced signal — verify on Downdetector',
+        updatedAt: null
+      };
+      break;
+    case 'partial':
+      // Downdetector's "danger" state — confirmed elevated reports.
+      statusText = 'Issues reported by users';
+      incident = {
+        name: 'Multiple users reporting problems on Downdetector',
+        status: 'Crowdsourced signal — verify on Downdetector',
+        updatedAt: null
+      };
+      break;
+    default:
+      statusText = 'Status unknown — see Downdetector';
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
 // AWS snapshot file:
 //   Written by the .github/workflows/fetch-aws.yml workflow every 5 minutes.
 //   Same-origin fetch, so no CORS issues.
@@ -1953,6 +2141,7 @@ function formatClockTime(date) {
 function renderTile(vendor, result) {
   const tile = document.createElement('div');
   tile.className = 'tile';
+  tile.dataset.vendorId = vendor.id;
 
   // Decide visual mode for this tile.
   //
@@ -2192,10 +2381,16 @@ function renderPlainBanner(results) {
   // tone and the icon/border color. Critical-tier issue overrides everything;
   // core-tier issue overrides secondary; etc. Same prioritization as the
   // previous summary banner — only the rendering changed.
-  const criticalVendors  = VENDORS.filter(v => v.tier === 'critical');
-  const coreVendors      = VENDORS.filter(v => v.tier === 'core');
-  const secondaryVendors = VENDORS.filter(v => v.tier === 'secondary');
-  const infraVendors     = VENDORS.filter(v => v.tier === 'infra');
+  //
+  // Audience-aware: when the user has filtered to Teaching or Operations,
+  // the banner only counts vendors visible in that view. Otherwise a critical
+  // outage of a tile they can't see would mismatch what's on screen.
+  const audience = (typeof getStoredAudience === 'function') ? getStoredAudience() : 'all';
+  const inAudience = (v) => audience === 'all' || (v.audience || []).includes(audience);
+  const criticalVendors  = VENDORS.filter(v => v.tier === 'critical'  && inAudience(v));
+  const coreVendors      = VENDORS.filter(v => v.tier === 'core'      && inAudience(v));
+  const secondaryVendors = VENDORS.filter(v => v.tier === 'secondary' && inAudience(v));
+  const infraVendors     = VENDORS.filter(v => v.tier === 'infra'     && inAudience(v));
 
   const hasIssue = (r) => r && !r.error && ['degraded','partial','major'].includes(r.severity);
   const affected = (vendorList) => vendorList.filter(v => hasIssue(results[v.id]));
@@ -2510,6 +2705,7 @@ async function fetchVendor(vendor) {
     case 'gimkitsnapshot':   return fetchGimkit(vendor);
     case 'soundtrapsnapshot': return fetchSoundtrap(vendor);
     case 'noredinksnapshot': return fetchNoRedInk(vendor);
+    case 'arbitersnapshot':  return fetchArbiterSports(vendor);
     case 'awssnapshot':      return fetchAWS(vendor);
     default: throw new Error('Unknown vendor type: ' + vendor.type);
   }
@@ -2531,6 +2727,10 @@ async function refreshAll() {
     }
   }
   renderAll(results);
+  lastResults = results;
+  if (typeof applyAudienceFilter === 'function') {
+    applyAudienceFilter(getStoredAudience());
+  }
 
   // Fetch each in parallel, update tiles as they complete
   const promises = VENDORS
@@ -2555,6 +2755,10 @@ async function refreshAll() {
 
   saveCache(cache);
   renderAll(results);
+  lastResults = results;
+  if (typeof applyAudienceFilter === 'function') {
+    applyAudienceFilter(getStoredAudience());
+  }
 
   const now = new Date();
   lastEl.textContent = 'Last checked: ' + formatClockTime(now);
@@ -2602,6 +2806,80 @@ document.getElementById('copyLinkBtn').addEventListener('click', async (e) => {
   } catch (_) {
     showConfirmation(false);
   }
+});
+
+//=============================================================================
+// AUDIENCE FILTER
+//=============================================================================
+// Three-button toggle (All / Teaching / Operations) above the first section.
+// Each vendor in VENDORS has an `audience` array; tiles whose audience array
+// doesn't include the selected view get .is-audience-hidden, which hides
+// them via display:none. Sections that end up with zero visible tiles
+// collapse via the existing .is-empty CSS path.
+//
+// Selection persists in localStorage per-browser. First-time visitors land
+// on "All" (no preference saved) — invites them to scope down to their role.
+
+const STORAGE_KEY_AUDIENCE = 'rj-edtech-status-audience';
+const VALID_AUDIENCES = ['all', 'teaching', 'operations'];
+
+function getStoredAudience() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_AUDIENCE);
+    return VALID_AUDIENCES.includes(stored) ? stored : 'all';
+  } catch (_) {
+    return 'all';  // localStorage unavailable (private browsing, etc.)
+  }
+}
+
+function setStoredAudience(audience) {
+  try {
+    localStorage.setItem(STORAGE_KEY_AUDIENCE, audience);
+  } catch (_) { /* silently fail — no localStorage available */ }
+}
+
+function applyAudienceFilter(audience) {
+  // Update button active state
+  document.querySelectorAll('.audience-btn').forEach(btn => {
+    btn.classList.toggle('is-active', btn.dataset.audience === audience);
+  });
+
+  // Show/hide tiles based on each vendor's audience array
+  document.querySelectorAll('[data-vendor-id]').forEach(tile => {
+    const vendorId = tile.dataset.vendorId;
+    const vendor = VENDORS.find(v => v.id === vendorId);
+    if (!vendor) return;
+    const matches = audience === 'all' || (vendor.audience || []).includes(audience);
+    tile.classList.toggle('is-audience-hidden', !matches);
+  });
+
+  // Collapse sections that have no visible tiles. We can't reuse the existing
+  // .is-empty path here because the tiles are still in the DOM (just hidden),
+  // so we count visible tiles per section ourselves.
+  document.querySelectorAll('.grid-task').forEach(grid => {
+    const visibleTiles = grid.querySelectorAll('.tile:not(.is-audience-hidden)');
+    const isEmpty = visibleTiles.length === 0;
+    grid.classList.toggle('is-empty', isEmpty);
+    const header = grid.previousElementSibling;
+    if (header && header.classList.contains('section-label')) {
+      header.classList.toggle('is-empty', isEmpty);
+    }
+  });
+
+  // Re-render the banner so its counts match the visible tiles. lastResults
+  // is set by refreshAll() and holds the most recent fetch results.
+  if (lastResults) {
+    renderPlainBanner(lastResults);
+  }
+}
+
+// Wire up button clicks
+document.querySelectorAll('.audience-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const audience = btn.dataset.audience;
+    setStoredAudience(audience);
+    applyAudienceFilter(audience);
+  });
 });
 
 // Initial load
