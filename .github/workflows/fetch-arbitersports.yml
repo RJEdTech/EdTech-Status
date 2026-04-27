@@ -17,59 +17,88 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch and parse ArbiterSports Downdetector page
+      - name: Fetch and parse ArbiterSports Pingdom status page
         run: |
           node <<'EOF'
-          const https = require('https');
+          const http = require('http');
           const fs = require('fs');
 
-          // ArbiterSports doesn't publish its own status page, so we scrape
-          // Downdetector. Important caveat: this is a CROWDSOURCED signal —
-          // it tells us "users are complaining," not "the vendor is reporting
-          // an issue." Expect a higher false-positive rate than other tiles
-          // on the dashboard.
+          // ArbiterSports publishes its own status page hosted by Pingdom at
+          // http://status.arbitersports.com/. The page itself is a static HTML
+          // shell — the actual check data is loaded via AJAX from the /checks
+          // endpoint on the same origin. We hit /checks directly and parse
+          // the jQuery dataTables JSON response.
           //
-          // Downdetector renders the page server-side as Next.js with the
-          // status data embedded in three independent places we can parse:
+          // ArbiterSports tracks five services in their public Pingdom page,
+          // but RJ only uses four of them. We filter to those and ignore
+          // ArbiterPay entirely:
+          //   - ArbiterLive
+          //   - ArbiterSports
+          //   - ArbiterSports Login Services
+          //   - Student Registration
           //
-          //   1. window.PogoConfig (preferred — clean boolean):
-          //      window.PogoConfig = {"template":"status",...,"outage":false};
+          // Pingdom uses four status states (per the icon legend in the page
+          // HTML and confirmed by the rendered page):
+          //   green  = service operating normally    (>= 99.90% uptime)
+          //   yellow = service disruption            (98.00-99.89% uptime)
+          //   red    = service outage                (<  98.00% uptime)
+          //   grey   = no data / unmonitored
           //
-          //   2. JSON-LD organization schema (fallback):
-          //      "companyCurrentStatus":"success"   // success | warning | danger
+          // We map per-service to dashboard severity:
+          //   green  -> operational
+          //   yellow -> degraded
+          //   red    -> partial   <-- capped here, NOT 'major'
+          //   grey   -> unknown
           //
-          //   3. Page heading text (last resort):
-          //      "User reports show no current problems with ArbiterSports"
-          //
-          // We try them in order. PogoConfig is at the top of the HTML and
-          // is the cleanest, but it's a binary outage flag — to distinguish
-          // success/warning/danger we need companyCurrentStatus too.
-          //
-          // Severity mapping (per dashboard conventions):
-          //   success  -> operational     (green)
-          //   warning  -> degraded        (yellow — "possible problems")
-          //   danger   -> partial         (orange — confirmed by report volume)
-          //
-          // We don't map danger to 'major' (red) because this is crowdsourced
-          // data, not an authoritative vendor signal. Orange says "something's
-          // up, click through" without ringing the same alarm as a vendor
-          // explicitly reporting a major outage.
-          const PAGE_URL = 'https://downdetector.com/status/arbitersports/';
+          // The 'partial' ceiling is deliberate. Pingdom's red is authoritative
+          // (vendor-monitored, not crowdsourced), but ArbiterSports outages
+          // affect athletics scheduling — important but not school-day-blocking
+          // in the way Canvas/Blackbaud outages are. Reserving 'major' (red)
+          // for those events keeps the dashboard's color language meaningful.
+          // The expand section in the dashboard surfaces the per-service
+          // breakdown so the AD can see exactly what's affected.
+          const CHECKS_URL = 'http://status.arbitersports.com/checks';
+          const PAGE_URL = 'http://status.arbitersports.com/';
           const OUT_PATH = 'arbitersports.json';
+
+          // Services we actually use. Tile severity = worst across these only.
+          // ArbiterPay is in the Pingdom page but not in this list — it's
+          // intentionally excluded.
+          const TRACKED_SERVICES = [
+            'ArbiterLive',
+            'ArbiterSports',
+            'ArbiterSports Login Services',
+            'Student Registration'
+          ];
+
+          // Severity ranking for "worst of" comparisons. Higher = worse.
+          const SEVERITY_RANK = {
+            operational: 0,
+            unknown:     1,  // grey: no data — surface but don't escalate
+            degraded:    2,
+            partial:     3
+          };
 
           function fetchUrl(url) {
             return new Promise((resolve, reject) => {
-              // Downdetector serves a normal HTML page; we need a realistic
-              // User-Agent because some CDN configs reject bare scraper UAs.
-              // We use a generic descriptor that identifies us honestly.
+              // Using HTTP not HTTPS because that's the protocol the Pingdom
+              // page uses (note the http:// in dataTableOptions['sAjaxSource']
+              // when rendered same-origin). If they ever switch to HTTPS this
+              // will break — the workflow's failure-state snapshot makes that
+              // visible in the dashboard so we'll see it.
               const opts = {
                 headers: {
+                  // Generic UA — Pingdom doesn't block scrapers, this is just
+                  // identifying ourselves honestly.
                   'User-Agent': 'rjedtech-status-dashboard',
-                  'Accept': 'text/html,application/xhtml+xml',
-                  'Accept-Language': 'en-US,en;q=0.9'
+                  'Accept': 'application/json, text/javascript, */*; q=0.01',
+                  // dataTables sets X-Requested-With for AJAX calls; including
+                  // it makes our request look like the page's own JS calls.
+                  'X-Requested-With': 'XMLHttpRequest',
+                  'Referer': PAGE_URL
                 }
               };
-              https.get(url, opts, (res) => {
+              http.get(url, opts, (res) => {
                 if (res.statusCode !== 200) {
                   reject(new Error('HTTP ' + res.statusCode));
                   return;
@@ -81,64 +110,89 @@ jobs:
             });
           }
 
-          // Try multiple parsing strategies in order of reliability.
-          // Returns { severity, source } where source identifies which strategy
-          // matched, useful for debugging if one path stops working.
-          function parseStatus(html) {
-            // Confirm we're on the right page first — Downdetector serves
-            // generic landing pages or 404s for unknown services.
-            if (!/arbitersports/i.test(html)) {
-              throw new Error('Page does not mention ArbiterSports — Downdetector may have moved or removed the listing.');
+          // Pingdom's /checks endpoint returns a jQuery dataTables-shaped JSON
+          // object. The rows live under aaData (dataTables 1.10 convention)
+          // and each row is an array of cell HTML fragments matching the
+          // column definitions in the page:
+          //   [0] status icon HTML       (e.g. '<span class="iconSmall green"></span>' or similar)
+          //   [1] name cell HTML         (e.g. '<a href="..."><strong>ArbiterLive</strong></a>')
+          //   [2..8] day1..day7 HTML     (small icons per day)
+          //
+          // We extract the status from cell 0 (current state) and the name
+          // from cell 1 (to identify which service it is). The 7-day cells
+          // aren't used — we only care about current state for the dashboard.
+          function parseChecksResponse(rawJson) {
+            let data;
+            try {
+              data = JSON.parse(rawJson);
+            } catch (e) {
+              throw new Error('Response is not valid JSON: ' + e.message + ' (first 200 chars: ' + rawJson.slice(0, 200) + ')');
             }
 
-            // Strategy 1: companyCurrentStatus from JSON-LD / Next.js data.
-            // This gives us the three-state value we want directly.
-            const statusMatch = html.match(/"companyCurrentStatus"\s*:\s*"([^"]+)"/);
-            if (statusMatch) {
-              const raw = statusMatch[1].toLowerCase();
-              let severity;
-              switch (raw) {
-                case 'success':  severity = 'operational'; break;
-                case 'warning':  severity = 'degraded';    break;
-                case 'danger':   severity = 'partial';     break;
-                default:
-                  // Unknown value — Downdetector may have introduced a new state.
-                  // Surface as breakage (handled by outer catch) rather than
-                  // guessing, so the JSON's parseError flags it for review.
-                  throw new Error('Unknown companyCurrentStatus value: ' + raw);
+            // dataTables can use either aaData (1.10 legacy) or data (1.10+).
+            // Try both.
+            const rows = data.aaData || data.data;
+            if (!Array.isArray(rows)) {
+              throw new Error('Response did not contain aaData or data array. Keys: ' + Object.keys(data).join(','));
+            }
+
+            const services = [];
+            for (const row of rows) {
+              if (!Array.isArray(row) || row.length < 2) {
+                console.warn('Skipping malformed row:', JSON.stringify(row));
+                continue;
               }
-              return { severity, source: 'companyCurrentStatus', rawValue: raw };
+
+              // Status icon: look for green/yellow/red/grey class names.
+              // The class might be on a span, div, or img — we just look
+              // at the HTML string for any of those keywords.
+              const statusHtml = String(row[0] || '');
+              let color = null;
+              if (/\bgreen\b/i.test(statusHtml))       color = 'green';
+              else if (/\byellow\b/i.test(statusHtml)) color = 'yellow';
+              else if (/\bred\b/i.test(statusHtml))    color = 'red';
+              else if (/\bgrey\b|\bgray\b/i.test(statusHtml)) color = 'grey';
+
+              // Name: strip HTML tags from cell 1 and trim
+              const nameHtml = String(row[1] || '');
+              const name = nameHtml.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim();
+
+              if (!name) {
+                console.warn('Skipping row with no parseable name:', JSON.stringify(row));
+                continue;
+              }
+
+              services.push({ name, color, statusHtml: statusHtml.slice(0, 200) });
             }
 
-            // Strategy 2: PogoConfig outage boolean. Less granular (no
-            // warning/degraded distinction) but still useful as a fallback.
-            const pogoMatch = html.match(/window\.PogoConfig\s*=\s*\{[^}]*"outage"\s*:\s*(true|false)/);
-            if (pogoMatch) {
-              const isOutage = pogoMatch[1] === 'true';
-              return {
-                severity: isOutage ? 'partial' : 'operational',
-                source: 'PogoConfig',
-                rawValue: pogoMatch[1]
-              };
+            if (services.length === 0) {
+              throw new Error('Parsed zero services from response — DataTables format may have changed.');
             }
 
-            // Strategy 3: Page heading text. Most fragile — wording could
-            // change at any time — but a final safety net.
-            if (/no current problems with/i.test(html)) {
-              return { severity: 'operational', source: 'heading-text', rawValue: 'no problems' };
-            }
-            if (/possible problems with/i.test(html)) {
-              return { severity: 'degraded', source: 'heading-text', rawValue: 'possible' };
-            }
-            if (/problems (?:at|with) /i.test(html)) {
-              return { severity: 'partial', source: 'heading-text', rawValue: 'problems' };
-            }
+            return services;
+          }
 
-            throw new Error('Could not find any expected status indicator on the Downdetector page — page structure may have changed.');
+          function colorToSeverity(color) {
+            switch (color) {
+              case 'green':  return 'operational';
+              case 'yellow': return 'degraded';
+              case 'red':    return 'partial';   // capped intentionally — see header comment
+              case 'grey':   return 'unknown';
+              default:       return 'unknown';
+            }
+          }
+
+          function colorToLabel(color) {
+            switch (color) {
+              case 'green':  return 'Operating normally';
+              case 'yellow': return 'Service disruption';
+              case 'red':    return 'Service outage';
+              case 'grey':   return 'No data';
+              default:       return 'Unknown';
+            }
           }
 
           (async () => {
-            // Helper: read existing snapshot if present
             function readExisting() {
               if (!fs.existsSync(OUT_PATH)) return null;
               try {
@@ -148,52 +202,78 @@ jobs:
               }
             }
 
-            // Helper: compare two objects' content fields (ignoring volatile timestamps)
+            // Compare meaningful content, ignoring volatile timestamps
             function contentEqual(a, b) {
               if (!a || !b) return false;
-              const fields = ['source', 'severity', 'parseSource', 'rawValue', 'parseError', 'lastSuccessfulParse'];
-              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+              if (a.severity !== b.severity) return false;
+              if (JSON.stringify(a.services) !== JSON.stringify(b.services)) return false;
+              if (JSON.stringify(a.parseError) !== JSON.stringify(b.parseError)) return false;
+              return true;
             }
 
             const existing = readExisting();
 
             try {
-              const html = await fetchUrl(PAGE_URL);
-              const parsed = parseStatus(html);
+              const rawJson = await fetchUrl(CHECKS_URL);
+              const parsed = parseChecksResponse(rawJson);
+
+              // Filter to services we actually use
+              const trackedServices = TRACKED_SERVICES.map((trackedName) => {
+                const found = parsed.find((s) => s.name === trackedName);
+                if (!found) {
+                  // Service is in our list but Pingdom didn't return it —
+                  // surface as 'unknown' so we notice if Pingdom drops it
+                  return { name: trackedName, severity: 'unknown', label: 'Not reported' };
+                }
+                return {
+                  name: trackedName,
+                  severity: colorToSeverity(found.color),
+                  label: colorToLabel(found.color)
+                };
+              });
+
+              // Roll up to worst-of: highest severity wins.
+              const worstSeverity = trackedServices.reduce((worst, s) => {
+                const r = SEVERITY_RANK[s.severity] ?? 1;
+                const wr = SEVERITY_RANK[worst] ?? 0;
+                return r > wr ? s.severity : worst;
+              }, 'operational');
+
+              // Log all services we saw, including untracked ones, for debugging
+              console.log('All services from Pingdom:');
+              for (const s of parsed) {
+                const tracked = TRACKED_SERVICES.includes(s.name) ? '[TRACKED]' : '[ignored]';
+                console.log(`  ${tracked} ${s.name}: ${s.color || 'unknown'}`);
+              }
 
               const now = new Date().toISOString();
               const newContent = {
                 source: PAGE_URL,
-                severity: parsed.severity,
-                parseSource: parsed.source,    // which strategy matched (debug)
-                rawValue: parsed.rawValue,     // raw value found (debug)
-                parseError: null,              // explicitly cleared on success
-                lastSuccessfulParse: now       // updated on every successful parse
+                severity: worstSeverity,
+                services: trackedServices,
+                parseError: null,
+                lastSuccessfulParse: now
               };
 
               if (contentEqual(newContent, existing)) {
-                console.log('No content change — skipping write. Current severity:', parsed.severity, '(via', parsed.source + ')');
+                console.log('No content change — skipping write. Roll-up severity:', worstSeverity);
                 return;
               }
 
               const snapshot = { fetchedAt: now, ...newContent };
               fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
-              console.log('Status content changed — wrote', OUT_PATH);
+              console.log('Status changed — wrote', OUT_PATH);
               console.log(JSON.stringify(snapshot, null, 2));
+
             } catch (err) {
-              // Don't lose the last-known status. Preserve everything from the
-              // last good fetch and layer parseError on top so the dashboard
-              // can flag the breakage while still showing the most recent
-              // valid reading.
-              console.error('Failed to fetch/parse Downdetector page:', err.message);
+              console.error('Failed to fetch/parse Pingdom checks endpoint:', err.message);
 
               const now = new Date().toISOString();
               const lastGood = existing || {};
               const newContent = {
                 source: PAGE_URL,
                 severity: lastGood.severity || 'unknown',
-                parseSource: lastGood.parseSource || null,
-                rawValue: lastGood.rawValue || null,
+                services: lastGood.services || null,
                 parseError: {
                   message: err.message,
                   firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
@@ -201,8 +281,7 @@ jobs:
                 lastSuccessfulParse: lastGood.lastSuccessfulParse || null
               };
 
-              // Only commit if the breakage state itself changed — don't spam
-              // commits every 5 minutes during a sustained scraper outage.
+              // Only commit if breakage state itself changed
               if (contentEqual(newContent, existing)) {
                 console.log('Parse still failing with same error — skipping write.');
                 return;
@@ -239,11 +318,8 @@ jobs:
           exit 1
 
       - name: Fail run if scraper is broken
-        # This step exists so the GitHub Actions run shows red whenever the
-        # scraper can't recognize the page, even though we wrote the breakage
-        # state to JSON in a clean exit (so the commit step could run). The
-        # dashboard surfaces breakage from the JSON; this step exists for
-        # GitHub-side alerting (red X on the Actions tab).
+        # Surface scraper breakage as a red Actions run so we notice via
+        # GitHub's UI even though we wrote the breakage state cleanly.
         run: |
           if [ -f arbitersports.json ] && grep -q '"parseError": {' arbitersports.json; then
             echo "::error::ArbiterSports scraper failed to parse the page. See arbitersports.json for details."
