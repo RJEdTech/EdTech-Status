@@ -1,0 +1,253 @@
+name: Fetch ArbiterSports status
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # so actual cadence can be 5-15 minutes — fine for our purposes.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated JSON file
+
+jobs:
+  fetch-arbitersports:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and parse ArbiterSports Downdetector page
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          // ArbiterSports doesn't publish its own status page, so we scrape
+          // Downdetector. Important caveat: this is a CROWDSOURCED signal —
+          // it tells us "users are complaining," not "the vendor is reporting
+          // an issue." Expect a higher false-positive rate than other tiles
+          // on the dashboard.
+          //
+          // Downdetector renders the page server-side as Next.js with the
+          // status data embedded in three independent places we can parse:
+          //
+          //   1. window.PogoConfig (preferred — clean boolean):
+          //      window.PogoConfig = {"template":"status",...,"outage":false};
+          //
+          //   2. JSON-LD organization schema (fallback):
+          //      "companyCurrentStatus":"success"   // success | warning | danger
+          //
+          //   3. Page heading text (last resort):
+          //      "User reports show no current problems with ArbiterSports"
+          //
+          // We try them in order. PogoConfig is at the top of the HTML and
+          // is the cleanest, but it's a binary outage flag — to distinguish
+          // success/warning/danger we need companyCurrentStatus too.
+          //
+          // Severity mapping (per dashboard conventions):
+          //   success  -> operational     (green)
+          //   warning  -> degraded        (yellow — "possible problems")
+          //   danger   -> partial         (orange — confirmed by report volume)
+          //
+          // We don't map danger to 'major' (red) because this is crowdsourced
+          // data, not an authoritative vendor signal. Orange says "something's
+          // up, click through" without ringing the same alarm as a vendor
+          // explicitly reporting a major outage.
+          const PAGE_URL = 'https://downdetector.com/status/arbitersports/';
+          const OUT_PATH = 'arbitersports.json';
+
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              // Downdetector serves a normal HTML page; we need a realistic
+              // User-Agent because some CDN configs reject bare scraper UAs.
+              // We use a generic descriptor that identifies us honestly.
+              const opts = {
+                headers: {
+                  'User-Agent': 'rjedtech-status-dashboard',
+                  'Accept': 'text/html,application/xhtml+xml',
+                  'Accept-Language': 'en-US,en;q=0.9'
+                }
+              };
+              https.get(url, opts, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
+                  return;
+                }
+                let body = '';
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
+            });
+          }
+
+          // Try multiple parsing strategies in order of reliability.
+          // Returns { severity, source } where source identifies which strategy
+          // matched, useful for debugging if one path stops working.
+          function parseStatus(html) {
+            // Confirm we're on the right page first — Downdetector serves
+            // generic landing pages or 404s for unknown services.
+            if (!/arbitersports/i.test(html)) {
+              throw new Error('Page does not mention ArbiterSports — Downdetector may have moved or removed the listing.');
+            }
+
+            // Strategy 1: companyCurrentStatus from JSON-LD / Next.js data.
+            // This gives us the three-state value we want directly.
+            const statusMatch = html.match(/"companyCurrentStatus"\s*:\s*"([^"]+)"/);
+            if (statusMatch) {
+              const raw = statusMatch[1].toLowerCase();
+              let severity;
+              switch (raw) {
+                case 'success':  severity = 'operational'; break;
+                case 'warning':  severity = 'degraded';    break;
+                case 'danger':   severity = 'partial';     break;
+                default:
+                  // Unknown value — Downdetector may have introduced a new state.
+                  // Surface as breakage (handled by outer catch) rather than
+                  // guessing, so the JSON's parseError flags it for review.
+                  throw new Error('Unknown companyCurrentStatus value: ' + raw);
+              }
+              return { severity, source: 'companyCurrentStatus', rawValue: raw };
+            }
+
+            // Strategy 2: PogoConfig outage boolean. Less granular (no
+            // warning/degraded distinction) but still useful as a fallback.
+            const pogoMatch = html.match(/window\.PogoConfig\s*=\s*\{[^}]*"outage"\s*:\s*(true|false)/);
+            if (pogoMatch) {
+              const isOutage = pogoMatch[1] === 'true';
+              return {
+                severity: isOutage ? 'partial' : 'operational',
+                source: 'PogoConfig',
+                rawValue: pogoMatch[1]
+              };
+            }
+
+            // Strategy 3: Page heading text. Most fragile — wording could
+            // change at any time — but a final safety net.
+            if (/no current problems with/i.test(html)) {
+              return { severity: 'operational', source: 'heading-text', rawValue: 'no problems' };
+            }
+            if (/possible problems with/i.test(html)) {
+              return { severity: 'degraded', source: 'heading-text', rawValue: 'possible' };
+            }
+            if (/problems (?:at|with) /i.test(html)) {
+              return { severity: 'partial', source: 'heading-text', rawValue: 'problems' };
+            }
+
+            throw new Error('Could not find any expected status indicator on the Downdetector page — page structure may have changed.');
+          }
+
+          (async () => {
+            // Helper: read existing snapshot if present
+            function readExisting() {
+              if (!fs.existsSync(OUT_PATH)) return null;
+              try {
+                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            }
+
+            // Helper: compare two objects' content fields (ignoring volatile timestamps)
+            function contentEqual(a, b) {
+              if (!a || !b) return false;
+              const fields = ['source', 'severity', 'parseSource', 'rawValue', 'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+            }
+
+            const existing = readExisting();
+
+            try {
+              const html = await fetchUrl(PAGE_URL);
+              const parsed = parseStatus(html);
+
+              const now = new Date().toISOString();
+              const newContent = {
+                source: PAGE_URL,
+                severity: parsed.severity,
+                parseSource: parsed.source,    // which strategy matched (debug)
+                rawValue: parsed.rawValue,     // raw value found (debug)
+                parseError: null,              // explicitly cleared on success
+                lastSuccessfulParse: now       // updated on every successful parse
+              };
+
+              if (contentEqual(newContent, existing)) {
+                console.log('No content change — skipping write. Current severity:', parsed.severity, '(via', parsed.source + ')');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Status content changed — wrote', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            } catch (err) {
+              // Don't lose the last-known status. Preserve everything from the
+              // last good fetch and layer parseError on top so the dashboard
+              // can flag the breakage while still showing the most recent
+              // valid reading.
+              console.error('Failed to fetch/parse Downdetector page:', err.message);
+
+              const now = new Date().toISOString();
+              const lastGood = existing || {};
+              const newContent = {
+                source: PAGE_URL,
+                severity: lastGood.severity || 'unknown',
+                parseSource: lastGood.parseSource || null,
+                rawValue: lastGood.rawValue || null,
+                parseError: {
+                  message: err.message,
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+
+              // Only commit if the breakage state itself changed — don't spam
+              // commits every 5 minutes during a sustained scraper outage.
+              if (contentEqual(newContent, existing)) {
+                console.log('Parse still failing with same error — skipping write.');
+                return;
+              }
+
+              const snapshot = { fetchedAt: now, ...newContent };
+              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
+              console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add arbitersports.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Update ArbiterSports status snapshot [skip ci]"
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "Pushed on attempt $i"
+              exit 0
+            fi
+            echo "Push failed (attempt $i) — pulling and retrying"
+            git pull --rebase origin main
+            sleep $((RANDOM % 5 + 1))
+          done
+          echo "::error::Failed to push after 5 attempts"
+          exit 1
+
+      - name: Fail run if scraper is broken
+        # This step exists so the GitHub Actions run shows red whenever the
+        # scraper can't recognize the page, even though we wrote the breakage
+        # state to JSON in a clean exit (so the commit step could run). The
+        # dashboard surfaces breakage from the JSON; this step exists for
+        # GitHub-side alerting (red X on the Actions tab).
+        run: |
+          if [ -f arbitersports.json ] && grep -q '"parseError": {' arbitersports.json; then
+            echo "::error::ArbiterSports scraper failed to parse the page. See arbitersports.json for details."
+            cat arbitersports.json
+            exit 1
+          fi
+          echo "ArbiterSports scraper succeeded."
