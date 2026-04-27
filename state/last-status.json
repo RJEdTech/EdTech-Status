@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-04-26T21:55:58.044Z",
+  "checkedAt": "2026-04-27T15:27:22.646Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "operational",
+    "blackbaud": "degraded",
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
@@ -11,7 +11,7 @@
     "deltamath": "operational",
     "cloudflare": "degraded",
     "copyleaks": "operational",
-    "aws": "operational",
+    "aws": "partial",
     "explorelearning": "unknown",
     "ixl": "operational",
     "quizizz": "operational",
