@@ -575,6 +575,23 @@
     background-size: 70%;
   }
 
+  /* Smaller inline dot for tile-expand rows — used when a row needs to show
+     a status indicator next to its value (e.g. ArbiterSports per-service
+     breakdown). Shares the same color tokens as .dot but sized for inline use. */
+  .expand-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin: 0 6px 1px 0;
+    vertical-align: middle;
+  }
+  .expand-dot.operational { background: var(--ok); }
+  .expand-dot.degraded    { background: var(--warn); }
+  .expand-dot.partial     { background: var(--alert); }
+  .expand-dot.major       { background: var(--crit); }
+  .expand-dot.unknown     { background: var(--neutral); }
+
   .status-text {
     font-size: 13px;
     font-weight: 600;
@@ -1258,25 +1275,26 @@ const VENDORS = [
     whatItDoes: 'Hosts and serves the public regisjesuit.com website — admissions pages, news, calendar, athletics info.',
     whenDown: 'Public-facing site may be slow or unreachable; existing visitors lose access to admissions forms, news, and event listings. Internal teaching tools are unaffected.'
   },
-  // ArbiterSports doesn't publish its own status page — we scrape Downdetector,
-  // which aggregates user-reported issues. That's a weaker signal than the other
-  // tiles on this dashboard (it tells us "users are complaining," not "the vendor
-  // is reporting an issue"), so expect a higher false-positive rate. The scraper
-  // (fetch-arbitersports.yml) reads the inline JSON status field from the rendered
-  // Downdetector HTML and writes arbitersports.json. Until that workflow is built,
-  // this tile will show "unknown" or breakage — that's expected.
+  // ArbiterSports doesn't publish a usable status page (Pingdom's /checks
+  // endpoint blocks unauthenticated access; Downdetector blocks GitHub
+  // runner IPs). The fetch-arbitersports.yml workflow runs synthetic HTTP
+  // checks every 5 minutes against two URLs:
+  //   1. Login flow (go.arbitersports.com — the Microsoft B2C tenant)
+  //   2. Application (www1.arbitersports.com/ArbiterGame/Schedule)
+  // Both layers must succeed for the AD's actual workflow to work. The
+  // tile rolls up to worst-of; per-check status surfaces in the expand.
   {
     id: 'arbitersports',
     task: 'operations',
     name: 'ArbiterSports',
-    sub: 'Athletics scheduling — Downdetector signal',
+    sub: 'Athletics scheduling — synthetic reachability check',
     tier: 'secondary',
     audience: ['operations'],
     type: 'arbitersnapshot',
     apiUrl: 'arbitersports.json',
-    pageUrl: 'https://downdetector.com/status/arbitersports/',
-    whatItDoes: 'Athletic event management — schedules officials, payments, and game assignments. Used by the athletic department.',
-    whenDown: 'Game scheduling and official assignments may be delayed; classroom teaching unaffected.'
+    pageUrl: 'https://www1.arbitersports.com/ArbiterGame/Schedule',
+    whatItDoes: 'Athletic event management — schedules officials, payments, and game assignments. Used by the athletic department. We monitor the login flow (Microsoft B2C) and the application server independently because they can fail separately.',
+    whenDown: 'Game scheduling and official assignments may be delayed. If the login flow is down, the AD can\'t get in even if the app is healthy. If the application is down, login succeeds but the schedule won\'t load. Affects athletic department only — classroom teaching is unaffected.'
   }
 ];
 
@@ -1923,15 +1941,28 @@ async function fetchNoRedInk(vendor) {
 //   Written by the .github/workflows/fetch-arbitersports.yml workflow every
 //   5 minutes. Same-origin fetch, so no CORS issues.
 //
-//   ArbiterSports doesn't publish its own status page, so we scrape
-//   Downdetector — a CROWDSOURCED signal that tracks user complaints rather
-//   than vendor-reported issues. Expect a higher false-positive rate than
-//   other tiles. The workflow extracts companyCurrentStatus from Downdetector's
-//   server-rendered Next.js data and maps to one of:
-//     'operational' | 'degraded' | 'partial'
-//   (We deliberately don't map to 'major' even on Downdetector's "danger"
-//   state — crowdsourced data shouldn't ring the same alarm as a vendor
-//   confirming a major outage.)
+//   ArbiterSports doesn't publish a usable status page (Pingdom's /checks
+//   endpoint blocks unauthenticated access; Downdetector blocks GitHub
+//   runner IPs). We run synthetic HTTP checks instead:
+//     1. Login flow:  go.arbitersports.com  (Microsoft B2C tenant)
+//     2. Application: www1.arbitersports.com/ArbiterGame/Schedule
+//
+//   Both checks need to succeed for the AD's actual workflow ("can I log
+//   in and reach the schedule?") to work. The tile rolls up to worst-of;
+//   the expand section breaks them out per-check.
+//
+//   Snapshot shape:
+//     {
+//       fetchedAt, source, severity, lastSuccessfulParse,
+//       services: [
+//         { name: 'Login flow', severity: 'operational', label: 'Operating normally', detail: null },
+//         { name: 'Application', severity: 'partial', label: 'Server error', detail: 'HTTP 503' }
+//       ],
+//       parseError: null | { message, firstFailedAt }
+//     }
+//
+//   Severity ceiling is 'partial' (orange) for any check failure — see
+//   workflow header for rationale.
 async function fetchArbiterSports(vendor) {
   const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1939,7 +1970,7 @@ async function fetchArbiterSports(vendor) {
 
   if (data.parseError) {
     return buildBreakageResult({
-      vendorPageLabel: 'Downdetector page',
+      vendorPageLabel: 'ArbiterSports status',
       lastKnownSeverity: data.severity,
       lastSuccessfulParse: data.lastSuccessfulParse,
       firstFailedAt: data.parseError.firstFailedAt,
@@ -1949,42 +1980,56 @@ async function fetchArbiterSports(vendor) {
   }
 
   const severity = data.severity || 'operational';
+  const services = Array.isArray(data.services) ? data.services : [];
+
+  // Per-service breakdown for the expand section. Renders both checks
+  // even when both are green — the breakdown documents what we monitor
+  // (the AD reading the tile shouldn't have to wonder which layer is
+  // covered by this check).
+  const expandRows = services.map(s => ({
+    label: s.name,
+    value: s.detail ? s.label + ' — ' + s.detail : s.label,
+    severity: s.severity
+  }));
 
   let statusText;
   let incident = null;
 
   switch (severity) {
     case 'operational':
-      statusText = 'No user-reported problems';
+      statusText = 'Login and application both reachable';
       break;
-    case 'degraded':
-      // Downdetector's "warning" state — possible problems based on report
-      // volume. Phrase this carefully so faculty don't read crowdsourced
-      // signal as confirmed outage.
-      statusText = 'Possible issues — user reports elevated';
+    case 'degraded': {
+      const affected = services.filter(s => s.severity !== 'operational');
+      const names = affected.map(s => s.name).join(', ');
+      statusText = 'Unexpected response' + (names ? ' — ' + names : '');
       incident = {
-        name: 'Users reporting potential issues on Downdetector',
-        status: 'Crowdsourced signal — verify on Downdetector',
+        name: 'Synthetic check returned unexpected content',
+        status: names ? 'Affected: ' + names : 'See expand for details',
         updatedAt: null
       };
       break;
-    case 'partial':
-      // Downdetector's "danger" state — confirmed elevated reports.
-      statusText = 'Issues reported by users';
+    }
+    case 'partial': {
+      const affected = services.filter(s => s.severity === 'partial');
+      const names = affected.map(s => s.name).join(', ');
+      statusText = 'Reachability issue' + (names ? ' — ' + names : '');
       incident = {
-        name: 'Multiple users reporting problems on Downdetector',
-        status: 'Crowdsourced signal — verify on Downdetector',
+        name: 'Synthetic check failed',
+        status: names ? 'Affected: ' + names : 'See expand for details',
         updatedAt: null
       };
       break;
+    }
     default:
-      statusText = 'Status unknown — see Downdetector';
+      statusText = 'Status unknown';
   }
 
   return {
     severity,
     statusText,
     incident,
+    expandRows,
     updatedAt: data.fetchedAt || new Date().toISOString()
   };
 }
@@ -2280,11 +2325,14 @@ function renderTile(vendor, result) {
   }
   tile.appendChild(footer);
 
-  // Expand block — "what does this mean for me" detail. Renders only if the
-  // vendor entry has whatItDoes/whenDown copy. Hidden by default; toggled by
-  // clicking anywhere on the tile (except on the footer links). Helps faculty
-  // build vendor literacy without cluttering the default scan.
-  if (vendor.whatItDoes || vendor.whenDown) {
+  // Expand block — "what does this mean for me" detail. Renders if the
+  // vendor entry has whatItDoes/whenDown copy, OR if the result includes
+  // dynamic expandRows (e.g. ArbiterSports per-service breakdown). Hidden
+  // by default; toggled by clicking anywhere on the tile (except on the
+  // footer links). Helps faculty build vendor literacy without cluttering
+  // the default scan.
+  const hasDynamicRows = Array.isArray(result?.expandRows) && result.expandRows.length > 0;
+  if (vendor.whatItDoes || vendor.whenDown || hasDynamicRows) {
     tile.classList.add('is-expandable');
 
     const expand = document.createElement('div');
@@ -2301,6 +2349,22 @@ function renderTile(vendor, result) {
       when.className = 'tile-expand-row';
       when.innerHTML = '<strong>If it\'s down:</strong> ' + escapeHtml(vendor.whenDown);
       expand.appendChild(when);
+    }
+    // Dynamic rows from the fetch handler. Each row is { label, value, severity? }.
+    // Used by ArbiterSports to break out per-service status from the rolled-up
+    // tile severity. severity is optional; when present, a small colored dot
+    // renders next to the value using the existing .dot.<severity> CSS.
+    if (hasDynamicRows) {
+      for (const row of result.expandRows) {
+        const div = document.createElement('div');
+        div.className = 'tile-expand-row tile-expand-row-status';
+        const label = '<strong>' + escapeHtml(row.label) + ':</strong> ';
+        const dot = row.severity
+          ? '<span class="expand-dot ' + escapeHtml(row.severity) + '"></span>'
+          : '';
+        div.innerHTML = label + dot + escapeHtml(row.value || '');
+        expand.appendChild(div);
+      }
     }
     tile.appendChild(expand);
 
