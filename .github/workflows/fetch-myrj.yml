@@ -158,6 +158,15 @@ jobs:
                 console.log('    ' + hop.status + ' ' + hop.url + (hop.error ? ' (ERROR: ' + hop.error + ')' : ''));
               }
 
+              // TEMPORARY DEBUG: dump first 1000 chars of the final response body
+              // so we can see what Blackbaud is actually serving. Remove this
+              // block once we've identified a stable verify string.
+              if (result.finalRes && result.finalRes.body) {
+                console.log('--- DEBUG: First 1000 chars of response body:');
+                console.log(result.finalRes.body.slice(0, 1000));
+                console.log('--- DEBUG: Body length:', result.finalRes.body.length);
+              }
+
               let severity, statusLabel, statusDetail;
 
               if (result.ok) {
