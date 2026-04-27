@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-04-27T09:10:39.304Z",
+  "fetchedAt": "2026-04-27T15:26:56.006Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
-  "severity": "operational",
-  "activeCount": 0,
-  "firstIncidentTitle": "",
+  "severity": "partial",
+  "activeCount": 2,
+  "firstIncidentTitle": "<![CDATA[Service is operating normally: [RESOLVED] Increased Connectivity Issues]]>",
   "parseError": null,
-  "lastSuccessfulParse": "2026-04-27T09:10:39.304Z"
+  "lastSuccessfulParse": "2026-04-27T15:26:56.006Z"
 }
