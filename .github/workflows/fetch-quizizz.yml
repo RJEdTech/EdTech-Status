@@ -151,12 +151,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state/last-status.json
+          git add quizizz.json
           if git diff --staged --quiet; then
             echo "No state changes to commit."
             exit 0
           fi
-          git commit -m "Update last-status.json [skip ci]"
+          git commit -m "Update Quizizz status snapshot [skip ci]"
           for attempt in 1 2 3 4 5; do
             if git push; then
               echo "Push succeeded on attempt $attempt."
