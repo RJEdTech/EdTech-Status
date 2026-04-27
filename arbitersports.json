@@ -1,0 +1,12 @@
+{
+  "fetchedAt": "2026-04-27T18:14:02.247Z",
+  "source": "https://downdetector.com/status/arbitersports/",
+  "severity": "unknown",
+  "parseSource": null,
+  "rawValue": null,
+  "parseError": {
+    "message": "HTTP 403",
+    "firstFailedAt": "2026-04-27T18:14:02.247Z"
+  },
+  "lastSuccessfulParse": null
+}
