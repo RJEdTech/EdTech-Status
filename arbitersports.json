@@ -1,11 +1,21 @@
 {
-  "fetchedAt": "2026-04-27T18:40:45.690Z",
-  "source": "http://status.arbitersports.com/",
-  "severity": "unknown",
-  "services": null,
-  "parseError": {
-    "message": "Parsed zero services from response — DataTables format may have changed.",
-    "firstFailedAt": "2026-04-27T18:14:02.247Z"
-  },
-  "lastSuccessfulParse": null
+  "fetchedAt": "2026-04-27T20:14:53.504Z",
+  "source": "synthetic-check",
+  "severity": "operational",
+  "services": [
+    {
+      "name": "Login flow",
+      "severity": "operational",
+      "label": "Operating normally",
+      "detail": null
+    },
+    {
+      "name": "Application",
+      "severity": "operational",
+      "label": "Operating normally",
+      "detail": null
+    }
+  ],
+  "parseError": null,
+  "lastSuccessfulParse": "2026-04-27T20:14:53.504Z"
 }
