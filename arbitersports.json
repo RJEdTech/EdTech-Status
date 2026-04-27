@@ -1,11 +1,10 @@
 {
-  "fetchedAt": "2026-04-27T18:14:02.247Z",
-  "source": "https://downdetector.com/status/arbitersports/",
+  "fetchedAt": "2026-04-27T18:40:45.690Z",
+  "source": "http://status.arbitersports.com/",
   "severity": "unknown",
-  "parseSource": null,
-  "rawValue": null,
+  "services": null,
   "parseError": {
-    "message": "HTTP 403",
+    "message": "Parsed zero services from response — DataTables format may have changed.",
     "firstFailedAt": "2026-04-27T18:14:02.247Z"
   },
   "lastSuccessfulParse": null
