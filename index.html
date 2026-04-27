@@ -1295,6 +1295,55 @@ const VENDORS = [
     pageUrl: 'https://www1.arbitersports.com/ArbiterGame/Schedule',
     whatItDoes: 'Athletic event management — schedules officials, payments, and game assignments. Used by the athletic department. We monitor the login flow (Microsoft B2C) and the application server independently because they can fail separately.',
     whenDown: 'Game scheduling and official assignments may be delayed. If the login flow is down, the AD can\'t get in even if the app is healthy. If the application is down, login succeeds but the schedule won\'t load. Affects athletic department only — classroom teaching is unaffected.'
+  },
+
+  // RJ Website — synthetic check on the public regisjesuit.com URL.
+  // Currently served by Finalsite, eventually by Ubiq Education. The URL
+  // stays the same as the CMS migrates between vendors, so this tile
+  // monitors RJ's actual public site regardless of which platform hosts
+  // it. Different signal from the Finalsite tile (which reports that
+  // platform globally) — they can diverge.
+  // Severity tier 'core' / red ceiling — first impressions matter for
+  // admissions, and a public-facing site outage has real consequence
+  // even outside school hours.
+  {
+    id: 'rj-website',
+    task: 'operations',
+    name: 'RJ Website',
+    sub: 'regisjesuit.com — synthetic reachability check',
+    tier: 'core',
+    audience: ['operations'],
+    type: 'rjwebsitesnapshot',
+    apiUrl: 'rj-website.json',
+    pageUrl: 'https://www.regisjesuit.com/',
+    whatItDoes: 'Public RJ website — admissions, news, calendar, athletics info. The CMS behind it changes over time (Finalsite today, Ubiq later), but the URL stays the same — so this check follows whatever platform is currently serving the site.',
+    whenDown: 'Prospective families and current parents can\'t reach admissions information, news, or event listings. First impressions for admissions visits are affected.'
+  },
+
+  // MyRJ — synthetic check on the Blackbaud Education Management login
+  // flow for the RJ tenant. Follows the redirect chain from
+  // regisjesuit.myschoolapp.com to app.blackbaud.com (Blackbaud ID),
+  // then STOPS — the further redirect to login.microsoftonline.com is
+  // already covered by the Microsoft 365 tile, so following it would
+  // double-count M365 sign-in outages.
+  // Unique signal: RJ-tenant-specific Blackbaud health plus the
+  // Blackbaud-Microsoft federation handoff — failures in those layers
+  // may not show on Blackbaud's global status page.
+  // Severity tier 'core' / orange ceiling — when MyRJ is down, faculty
+  // workaround is "email attendance to the Dean's office". Friction,
+  // not a stoppage.
+  {
+    id: 'myrj',
+    task: 'operations',
+    name: 'MyRJ',
+    sub: 'Faculty login flow — synthetic check',
+    tier: 'core',
+    audience: ['teaching', 'operations'],
+    type: 'myrjsnapshot',
+    apiUrl: 'myrj.json',
+    pageUrl: 'https://regisjesuit.myschoolapp.com/app/faculty?svcid=edu',
+    whatItDoes: 'Blackbaud Education Management login for faculty — attendance, grades, parent communication, Grade School LMS. We follow the redirect chain to confirm the Blackbaud sign-in page loads. (We stop short of Microsoft sign-in because that\'s already covered by the Microsoft 365 tile.)',
+    whenDown: 'Faculty can\'t log in to take attendance, post grades, or access the Grade School LMS. Workaround: email attendance directly to the Dean\'s office. If sign-in is the failure mode, check Microsoft sign-in for an upstream cause.'
   }
 ];
 
@@ -2030,6 +2079,117 @@ async function fetchArbiterSports(vendor) {
     statusText,
     incident,
     expandRows,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
+// RJ Website snapshot file:
+//   Written by the .github/workflows/fetch-rj-website.yml workflow every
+//   5 minutes. Same-origin fetch, so no CORS issues.
+//
+//   Synthetic check on https://www.regisjesuit.com/. The URL stays the
+//   same as RJ's CMS migrates between vendors (Finalsite today, Ubiq
+//   eventually), so this monitors "is OUR website up" regardless of
+//   which platform is hosting it. Different signal from the Finalsite
+//   tile (which reports Finalsite-the-platform globally) — they can
+//   diverge.
+//
+//   Severity ceiling: 'major' (red) per Jason's call — public-facing
+//   site outage matters for admissions impressions even outside school
+//   hours.
+async function fetchRJWebsite(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'regisjesuit.com',
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  const severity = data.severity || 'operational';
+  const statusLabel = data.statusLabel || 'Unknown';
+  const statusDetail = data.statusDetail || null;
+
+  let statusText = statusLabel;
+  let incident = null;
+
+  if (severity !== 'operational') {
+    statusText = statusDetail ? statusLabel + ' — ' + statusDetail : statusLabel;
+    incident = {
+      name: 'Synthetic check failed for regisjesuit.com',
+      status: statusDetail || statusLabel,
+      updatedAt: null
+    };
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
+// MyRJ snapshot file:
+//   Written by the .github/workflows/fetch-myrj.yml workflow every 5 minutes.
+//   Same-origin fetch, so no CORS issues.
+//
+//   Synthetic check on the MyRJ faculty login flow:
+//   regisjesuit.myschoolapp.com → app.blackbaud.com (Blackbaud ID)
+//   We stop at app.blackbaud.com on purpose — the further redirect to
+//   login.microsoftonline.com is already covered by the Microsoft 365
+//   tile, so following it would double-count M365 sign-in outages.
+//
+//   This tile's UNIQUE signal: RJ-tenant-specific Blackbaud health PLUS
+//   the Blackbaud-Microsoft federation handoff. Failures in those layers
+//   may not show on Blackbaud's global status page.
+//
+//   Severity ceiling: 'partial' (orange) per Jason — when MyRJ is down,
+//   workaround is "email attendance to the Dean's office". Friction,
+//   not a stoppage.
+async function fetchMyRJ(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: 'MyRJ login',
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  const severity = data.severity || 'operational';
+  const statusLabel = data.statusLabel || 'Unknown';
+  const statusDetail = data.statusDetail || null;
+
+  let statusText = statusLabel;
+  let incident = null;
+
+  if (severity !== 'operational') {
+    statusText = statusDetail ? statusLabel + ' — ' + statusDetail : statusLabel;
+    incident = {
+      name: 'Synthetic check failed for MyRJ login flow',
+      status: statusDetail || statusLabel,
+      updatedAt: null
+    };
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
     updatedAt: data.fetchedAt || new Date().toISOString()
   };
 }
@@ -2770,6 +2930,8 @@ async function fetchVendor(vendor) {
     case 'soundtrapsnapshot': return fetchSoundtrap(vendor);
     case 'noredinksnapshot': return fetchNoRedInk(vendor);
     case 'arbitersnapshot':  return fetchArbiterSports(vendor);
+    case 'rjwebsitesnapshot': return fetchRJWebsite(vendor);
+    case 'myrjsnapshot':     return fetchMyRJ(vendor);
     case 'awssnapshot':      return fetchAWS(vendor);
     default: throw new Error('Unknown vendor type: ' + vendor.type);
   }
