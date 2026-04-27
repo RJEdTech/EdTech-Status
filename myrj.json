@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-04-27T20:27:00.447Z",
+  "fetchedAt": "2026-04-27T20:35:08.857Z",
   "source": "synthetic-check",
   "target": "https://regisjesuit.myschoolapp.com/app/faculty?svcid=edu",
-  "severity": "degraded",
-  "statusLabel": "Unexpected redirect path",
-  "statusDetail": "Did not reach app.blackbaud.com after 1 hop(s)",
+  "severity": "operational",
+  "statusLabel": "Operating normally",
+  "statusDetail": null,
   "parseError": null,
-  "lastSuccessfulParse": "2026-04-27T20:27:00.447Z"
+  "lastSuccessfulParse": "2026-04-27T20:35:08.857Z"
 }
