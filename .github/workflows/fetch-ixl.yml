@@ -28,7 +28,7 @@ jobs:
 
           function fetchUrl(url) {
             return new Promise((resolve, reject) => {
-              https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; rjedtech-status-dashboard)' } }, (res) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
                 if (res.statusCode !== 200) {
                   reject(new Error('HTTP ' + res.statusCode));
                   return;
@@ -38,6 +38,31 @@ jobs:
                 res.on('end', () => resolve(body));
               }).on('error', reject);
             });
+          }
+
+          // Uptime.com occasionally returns a page where the inline status JS
+          // blob hasn't rendered (edge cache, anti-bot challenge, etc.). Rather
+          // than declaring breakage on the first miss, retry up to 3 times with
+          // a short backoff before giving up. Most flakes resolve on attempt 2.
+          async function fetchWithRetry(url, attempts) {
+            attempts = attempts || 3;
+            let lastErr;
+            for (let i = 1; i <= attempts; i++) {
+              try {
+                const html = await fetchUrl(url);
+                if (!/global_is_operational|StatusPageDisplayController/i.test(html)) {
+                  throw new Error('Page does not contain expected Uptime.com markers');
+                }
+                return html;
+              } catch (e) {
+                lastErr = e;
+                if (i < attempts) {
+                  console.log('Attempt ' + i + ' failed: ' + e.message + ' — retrying');
+                  await new Promise(function (r) { setTimeout(r, 2000 * i); });
+                }
+              }
+            }
+            throw new Error('Failed after ' + attempts + ' attempts: ' + lastErr.message);
           }
 
           // Detection logic: status.ixl.com is hosted on Uptime.com, which renders
@@ -130,7 +155,7 @@ jobs:
             const existing = readExisting();
 
             try {
-              const html = await fetchUrl(PAGE_URL);
+              const html = await fetchWithRetry(PAGE_URL);
               console.log('HTML length:', html.length);
               console.log('Contains global_is_operational:', html.includes('global_is_operational'));
               const parsed = parseStatus(html);
