@@ -81,6 +81,12 @@ jobs:
               kind: 'snapshot', file: 'soundtrap.json' },
             { id: 'noredink', name: 'NoRedInk', tier: 'secondary',
               kind: 'snapshot', file: 'noredink.json' },
+
+            // Operations vendors (added when audience filter shipped)
+            { id: 'finalsite', name: 'Finalsite', tier: 'secondary',
+              kind: 'statuspage', url: 'https://status.finalsite.com/api/v2/status.json' },
+            { id: 'arbitersports', name: 'ArbiterSports', tier: 'secondary',
+              kind: 'snapshot', file: 'arbitersports.json' },
           ];
 
           // Infra → dependent service map. Used to suppress infra-only alerts
