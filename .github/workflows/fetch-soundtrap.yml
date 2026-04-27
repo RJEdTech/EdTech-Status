@@ -152,17 +152,18 @@ jobs:
             exit 0
           fi
           git commit -m "Update Soundtrap status snapshot [skip ci]"
-          for attempt in 1 2 3 4 5; do
+          for i in 1 2 3 4 5; do
             if git push; then
-              echo "Push succeeded on attempt $attempt."
+              echo "Pushed on attempt $i"
               exit 0
             fi
-            echo "Push failed on attempt $attempt — rebasing and retrying..."
+            echo "Push failed (attempt $i) — pulling and retrying"
             git pull --rebase origin main
             sleep $((RANDOM % 5 + 1))
           done
-          echo "Push failed after 5 attempts."
+          echo "::error::Failed to push after 5 attempts"
           exit 1
+
       - name: Fail run if scraper is broken
         run: |
           if [ -f soundtrap.json ] && grep -q '"parseError": {' soundtrap.json; then
