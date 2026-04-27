@@ -26,44 +26,46 @@ jobs:
 
           // Synthetic check on the MyRJ faculty login flow.
           //
-          // The login flow has three layers, each owned by a different vendor:
-          //   1. regisjesuit.myschoolapp.com  — Blackbaud's tenant for RJ
-          //   2. app.blackbaud.com/signin     — Blackbaud ID (their global B2C)
-          //   3. login.microsoftonline.com    — Microsoft Entra (RJ's tenant)
+          // Blackbaud's tenant URL serves a 200 OK directly with HTML that
+          // bootstraps the auth flow client-side via JavaScript — there's no
+          // server-side redirect to follow. So we make a single GET and
+          // verify the response is OUR tenant's HTML (not an error page,
+          // not a different tenant's content, not a maintenance shell).
           //
-          // Layer 3 is already covered by the Microsoft 365 tile, so we
-          // intentionally STOP at layer 2. This avoids double-counting M365
-          // sign-in outages on this tile. The unique signal this tile adds is
-          // RJ-tenant-specific health PLUS the Blackbaud-Microsoft federation
-          // handoff — failure modes the global Blackbaud status page may not
-          // catch.
+          // Verify string: 'apple-mobile-web-app-title" content="RJHS"'
+          // This is RJ-tenant-specific Blackbaud config — it identifies
+          // the school as RJHS (Regis Jesuit High School) and is stable
+          // configuration that wouldn't change without an admin action.
           //
-          // Severity ceiling: 'partial' (orange). Per Jason: when MyRJ is
-          // down, faculty workaround is "email attendance to the Dean's
-          // office" — friction, not a stoppage. Reserving 'major' (red)
-          // for events with no workaround at all.
+          // What this catches:
+          //   - regisjesuit.myschoolapp.com unreachable / DNS failure
+          //   - 5xx errors at Blackbaud's tenant infrastructure
+          //   - Wrong tenant served (would land in 'degraded' state — RJHS
+          //     marker missing means something served but not OUR content)
           //
-          // Behavior: the start URL bounces unauthenticated visitors to
-          // app.blackbaud.com/signin/?login_hint=...&redirectUrl=...
-          // We follow that redirect and verify the Blackbaud sign-in page
-          // loaded. We do NOT follow the further redirect to Microsoft —
-          // the M365 tile already covers that.
-          const START_URL = 'https://regisjesuit.myschoolapp.com/app/faculty?svcid=edu';
-          const VERIFY_STRING_HOST = 'app.blackbaud.com';   // we should land on Blackbaud's sign-in
+          // What this DOESN'T catch:
+          //   - Microsoft sign-in failures (covered by Microsoft 365 tile)
+          //   - Blackbaud-Microsoft federation handoff (would require a
+          //     headless browser to follow client-side redirects)
+          //   - Post-login application bugs
+          //
+          // Severity ceiling: 'partial' (orange). When MyRJ is down, faculty
+          // workaround is "email attendance to the Dean's office" — friction,
+          // not a stoppage. Reserving 'major' (red) for events with no
+          // workaround at all.
+          const TARGET_URL = 'https://regisjesuit.myschoolapp.com/app/faculty?svcid=edu';
+          const VERIFY_STRING = 'apple-mobile-web-app-title" content="RJHS"';
           const OUT_PATH = 'myrj.json';
           const TIMEOUT_MS = 15000;
-          const MAX_REDIRECTS = 3;  // tight cap — we expect 1-2 hops to Blackbaud
           const USER_AGENT = 'rjedtech-status-dashboard (https://rjedtech.github.io/EdTech-Status/)';
 
-          // Fetch ONE hop. We control redirect-following manually so we can
-          // stop at app.blackbaud.com without continuing into Microsoft.
-          function fetchOnce(targetUrl) {
+          function fetchUrl(targetUrl) {
             return new Promise((resolve) => {
               let parsedUrl;
               try {
                 parsedUrl = new URL(targetUrl);
               } catch (err) {
-                resolve({ ok: false, status: 0, body: '', error: 'Invalid URL: ' + err.message, location: null });
+                resolve({ ok: false, status: 0, body: '', error: 'Invalid URL: ' + err.message });
                 return;
               }
               const opts = {
@@ -89,51 +91,13 @@ jobs:
                     ok: res.statusCode >= 200 && res.statusCode < 400,
                     status: res.statusCode,
                     body,
-                    error: null,
-                    location: res.headers.location || null,
-                    finalUrl: parsedUrl.toString()
+                    error: null
                   });
                 });
               });
-              req.on('error', (err) => resolve({ ok: false, status: 0, body: '', error: err.message, location: null }));
+              req.on('error', (err) => resolve({ ok: false, status: 0, body: '', error: err.message }));
               req.on('timeout', () => req.destroy(new Error('Request timed out after ' + TIMEOUT_MS + 'ms')));
             });
-          }
-
-          // Walk the redirect chain manually, but bail out the moment we
-          // land on app.blackbaud.com — that's our target. If we never
-          // reach Blackbaud, that's a failure mode worth surfacing.
-          async function followToBlackbaud(startUrl) {
-            const chain = [];
-            let currentUrl = startUrl;
-            for (let i = 0; i < MAX_REDIRECTS + 1; i++) {
-              const res = await fetchOnce(currentUrl);
-              chain.push({ url: currentUrl, status: res.status, error: res.error });
-              if (res.error) {
-                return { ok: false, error: res.error, chain, finalRes: res };
-              }
-              const isRedirect = [301, 302, 303, 307, 308].includes(res.status);
-              const landedOnTarget = currentUrl.includes(VERIFY_STRING_HOST);
-
-              // If we've landed on the Blackbaud sign-in host with a 200,
-              // we're done — return success.
-              if (landedOnTarget && res.status >= 200 && res.status < 300) {
-                return { ok: true, chain, finalRes: res };
-              }
-              // If we landed on Blackbaud but got an error status, that's
-              // a real problem at Blackbaud's sign-in.
-              if (landedOnTarget && res.status >= 400) {
-                return { ok: false, error: 'Blackbaud sign-in returned HTTP ' + res.status, chain, finalRes: res };
-              }
-              // Not yet on target; if there's a redirect, follow it.
-              if (isRedirect && res.location) {
-                currentUrl = new URL(res.location, currentUrl).toString();
-                continue;
-              }
-              // No more redirects, never reached target — that's a problem.
-              return { ok: false, error: 'Did not reach ' + VERIFY_STRING_HOST + ' after ' + (i + 1) + ' hop(s)', chain, finalRes: res };
-            }
-            return { ok: false, error: 'Exceeded max redirects (' + MAX_REDIRECTS + ')', chain, finalRes: null };
           }
 
           (async () => {
@@ -151,50 +115,32 @@ jobs:
             const existing = readExisting();
 
             try {
-              console.log('--- Checking', START_URL);
-              const result = await followToBlackbaud(START_URL);
-              console.log('  Redirect chain:');
-              for (const hop of result.chain) {
-                console.log('    ' + hop.status + ' ' + hop.url + (hop.error ? ' (ERROR: ' + hop.error + ')' : ''));
-              }
-
-              // TEMPORARY DEBUG: dump first 1000 chars of the final response body
-              // so we can see what Blackbaud is actually serving. Remove this
-              // block once we've identified a stable verify string.
-              if (result.finalRes && result.finalRes.body) {
-                console.log('--- DEBUG: First 1000 chars of response body:');
-                console.log(result.finalRes.body.slice(0, 1000));
-                console.log('--- DEBUG: Body length:', result.finalRes.body.length);
-              }
+              console.log('--- Checking', TARGET_URL);
+              const res = await fetchUrl(TARGET_URL);
+              console.log('  Status:', res.status, '  Body length:', res.body.length);
 
               let severity, statusLabel, statusDetail;
 
-              if (result.ok) {
+              if (res.error) {
+                severity = 'partial';
+                statusLabel = 'Unreachable';
+                statusDetail = res.error;
+              } else if (res.status >= 500) {
+                severity = 'partial';
+                statusLabel = 'Server error';
+                statusDetail = 'HTTP ' + res.status;
+              } else if (res.status >= 400) {
+                severity = 'partial';
+                statusLabel = 'Login broken';
+                statusDetail = 'HTTP ' + res.status;
+              } else if (!res.body.includes(VERIFY_STRING)) {
+                severity = 'degraded';
+                statusLabel = 'Unexpected page content';
+                statusDetail = 'RJHS tenant marker missing from response — tenant may be misconfigured or replaced';
+              } else {
                 severity = 'operational';
                 statusLabel = 'Operating normally';
                 statusDetail = null;
-              } else {
-                // Differentiate types of failure for clearer messaging
-                const finalRes = result.finalRes;
-                if (finalRes && finalRes.error) {
-                  // Network-level failure
-                  severity = 'partial';
-                  statusLabel = 'Unreachable';
-                  statusDetail = finalRes.error;
-                } else if (finalRes && finalRes.status >= 500) {
-                  severity = 'partial';
-                  statusLabel = 'Server error';
-                  statusDetail = 'HTTP ' + finalRes.status;
-                } else if (finalRes && finalRes.status >= 400) {
-                  severity = 'partial';
-                  statusLabel = 'Login broken';
-                  statusDetail = 'HTTP ' + finalRes.status;
-                } else {
-                  // Got responses but never hit Blackbaud — federation issue
-                  severity = 'degraded';
-                  statusLabel = 'Unexpected redirect path';
-                  statusDetail = result.error;
-                }
               }
 
               console.log('--- Severity:', severity, '-', statusLabel);
@@ -202,7 +148,7 @@ jobs:
               const now = new Date().toISOString();
               const newContent = {
                 source: 'synthetic-check',
-                target: START_URL,
+                target: TARGET_URL,
                 severity,
                 statusLabel,
                 statusDetail,
@@ -225,7 +171,7 @@ jobs:
               const lastGood = existing || {};
               const newContent = {
                 source: 'synthetic-check',
-                target: START_URL,
+                target: TARGET_URL,
                 severity: lastGood.severity || 'unknown',
                 statusLabel: lastGood.statusLabel || null,
                 statusDetail: lastGood.statusDetail || null,
