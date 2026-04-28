@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-04-28T20:49:35.139Z",
+  "fetchedAt": "2026-04-28T23:41:24.130Z",
   "source": "https://status.ixl.com/",
   "severity": "operational",
   "isOperational": true,
@@ -7,9 +7,6 @@
   "isCritical": false,
   "incidentCount": 0,
   "firstIncidentName": "",
-  "parseError": {
-    "message": "Failed after 3 attempts: Page does not contain expected Uptime.com markers",
-    "firstFailedAt": "2026-04-28T20:49:35.139Z"
-  },
-  "lastSuccessfulParse": "2026-04-28T16:24:57.123Z"
+  "parseError": null,
+  "lastSuccessfulParse": "2026-04-28T23:41:24.130Z"
 }
