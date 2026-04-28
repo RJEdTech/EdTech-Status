@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-04-28T18:11:25.286Z",
+  "checkedAt": "2026-04-28T21:44:49.129Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -9,11 +9,11 @@
     "aspiredu": "operational",
     "kahoot": "operational",
     "deltamath": "operational",
-    "cloudflare": "degraded",
+    "cloudflare": "partial",
     "copyleaks": "operational",
     "aws": "operational",
     "explorelearning": "unknown",
-    "ixl": "operational",
+    "ixl": "breakage",
     "quizizz": "operational",
     "gimkit": "operational",
     "soundtrap": "unknown",
