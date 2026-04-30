@@ -116,6 +116,32 @@ The workflow's status mapping (`mapStatusToSeverity` in the YAML) is similarly b
 
 Adjust the keyword lists or status mapping in the YAML when the first real outage surfaces patterns we missed.
 
+### Cloudflare — incident filtering
+
+Cloudflare's status page reports issues across hundreds of products and global regions. RJ doesn't use Cloudflare as a customer; we only feel CF outages when they hit core proxy products that vendor sites (Canvas, NoRedInk, Quizizz, etc.) depend on.
+
+The Cloudflare tile uses a custom `fetchCloudflare` wrapper that calls the standard Statuspage handler, then post-processes the active incident to classify it as one of:
+
+- **RJ-impacting** — the tile renders the Cloudflare-reported severity normally (yellow/orange/red).
+- **Not RJ-impacting** — the tile keeps the same severity color but rewrites the status text to "Cloudflare reporting issues — not affecting RJ teaching tools." The original incident name is preserved underneath so the reader can verify.
+- **Ambiguous** — defaults to RJ-impacting (conservative).
+
+Classification is keyword-based, with three lists in `index.html`:
+
+| Bucket | Examples |
+|---|---|
+| Impacting | CDN, DNS, Network Performance, SSL, Firewall, US/NA POPs (DEN, DFW, IAD, ORD, SLC) |
+| Not impacting | Access, WARP, Zero Trust, Workers, R2, Pages, Stream, Turnstile, non-NA POPs |
+| Ambiguous | Anything that doesn't match either list — treated as impacting |
+
+**Tuning principle:** false negatives (missing a real outage) are worse than false positives. When in doubt, the filter classifies as impacting.
+
+**Known caveats:**
+- **Vivi** (classroom display): runs on AWS, but we haven't confirmed whether it's also fronted by Cloudflare. If a real-world correlation is observed (CF yellow + Vivi degraded simultaneously), Vivi should be added to the dependency map.
+- **Turnstile:** No known RJ vendor uses Cloudflare Turnstile on login screens. If one starts to, revisit the filter — Turnstile is currently classified as not-impacting.
+- **Geography:** Aurora, CO traffic primarily routes through Denver, with fallback to Dallas, Salt Lake City, Chicago, and Ashburn. Non-NA datacenter incidents are filtered out. If Cloudflare's anycast routing shifts and a non-NA outage starts cascading to RJ traffic, this assumption needs revisiting.
+- **The "Behind the scenes" section caveat still applies.** Even with filtering, Cloudflare yellow is context, not a teaching-day alarm. Read it as "could be related" when a primary tool is also red.
+
 ### GitHub Actions workflows (CORS workarounds and scraping)
 
 Seven vendors don't expose a browser-fetchable JSON endpoint, so a GitHub Actions workflow scrapes each one every 5 minutes, parses the result server-side, and commits the snapshot back to the repo. The dashboard then reads that JSON file from same-origin — no CORS issue.
