@@ -769,7 +769,7 @@
     .meta { align-items: flex-start; }
     .head-row { align-items: flex-start; }
     .brand-logo-img { height: 56px; }
-    body { background-size: min(50vh, 320px) auto; }
+    .watermark { background-size: min(50vh, 320px) auto; }
   }
 </style>
 </head>
@@ -1451,99 +1451,6 @@ let refreshTimer = null;
 let lastResults = null;
 
 //=============================================================================
-// FETCHERS
-//=============================================================================
-
-// Helper: build a result object for a vendor whose scraper or API has broken.
-// "Breakage" is distinct from a vendor-reported outage. It means we tried to
-// read the source and either couldn't (network) or didn't recognize what we
-// got back (schema drift). The dot is slate with a wrench glyph; the tile
-// shows the underlying last-known severity in the incident detail line so
-// the reader can judge how stale that reading is.
-//
-// firstFailedAt comes from the snapshot file (scraped vendors) and persists
-// across workflow runs, so we can show "broken since 6h ago." For runtime
-// fetches (Statuspage/Instatus), pass null and it'll just say "broken now."
-function buildBreakageResult({ vendorPageLabel, lastKnownSeverity, lastSuccessfulParse,
-                                firstFailedAt, errorMessage, updatedAt }) {
-  const lastKnownLabel = lastKnownSeverity && lastKnownSeverity !== 'unknown'
-    ? severityLabel(lastKnownSeverity).toLowerCase()
-    : null;
-
-  let detail;
-  if (lastKnownLabel && lastSuccessfulParse) {
-    detail = 'Last good reading: ' + lastKnownLabel + ' (' + formatTimestamp(lastSuccessfulParse) + ')';
-  } else if (lastKnownLabel) {
-    detail = 'Last good reading: ' + lastKnownLabel;
-  } else {
-    detail = 'No prior good reading available';
-  }
-
-  return {
-    severity: 'breakage',
-    statusText: 'Status check broken — open ' + vendorPageLabel + ' to verify',
-    incident: {
-      name: detail,
-      status: errorMessage || 'Could not parse source',
-      updatedAt: firstFailedAt || null
-    },
-    updatedAt: updatedAt || new Date().toISOString(),
-    breakage: true
-  };
-}
-
-// Atlassian Statuspage v2 status indicators:
-//   none    -> all good
-//   minor   -> degraded
-//   major   -> partial outage
-//   critical-> major outage
-async function fetchStatuspage(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-
-  // Schema validation: Atlassian Statuspage v2 has been stable for years, but
-  // if data.status.indicator is missing entirely, the response shape has drifted
-  // and we shouldn't quietly default to "unknown" (which renders as gray and
-  // looks like a network glitch). Surface as breakage so the reader knows the
-  // dashboard, not the vendor, is the problem.
-  const indicator = data.status?.indicator;
-  const knownIndicators = ['none', 'minor', 'major', 'critical', 'maintenance'];
-  if (!indicator || !knownIndicators.includes(indicator)) {
-    return buildBreakageResult({
-      vendorPageLabel: vendor.name + ' status page',
-      lastKnownSeverity: null,
-      lastSuccessfulParse: null,
-      firstFailedAt: null,
-      errorMessage: indicator
-        ? 'Unknown status indicator: "' + indicator + '"'
-        : 'status.indicator missing from API response',
-      updatedAt: new Date().toISOString()
-    });
-  }
-
-  const description = data.status?.description || severityLabel(mapStatuspageIndicator(indicator));
-  const updatedAt = data.page?.updated_at;
-
-  // Try to fetch unresolved incidents in parallel for richer display
-  let incident = null;
-  if (indicator !== 'none' && vendor.summaryUrl) {
-    try {
-      const sumRes = await fetch(vendor.summaryUrl, { cache: 'no-store' });
-      if (sumRes.ok) {
-        const sum = await sumRes.json();
-        const inc = (sum.incidents || []).find(i => i.status !== 'resolved');
-        if (inc) {
-          incident = {
-            name: inc.name,
-            status: inc.status,
-            updatedAt: inc.updated_at || inc.created_at
-          };
-        }
-      }
-    } catch (_) { /* non-fatal */ }
-  }
-//=============================================================================
 // CLOUDFLARE INCIDENT FILTERING
 //=============================================================================
 // RJ doesn't use Cloudflare directly — we feel CF outages only when they hit
@@ -1658,7 +1565,7 @@ const CF_NON_NA_CITIES = [
   'são paulo', 'sao paulo', 'rio de janeiro', 'buenos aires', 'santiago',
   'bogot', 'lima', 'caracas',
   'cape town', 'johannesburg', 'lagos', 'nairobi', 'cairo',
-  'dubai', 'doha', 'riyadh', 'tel aviv', 'mumbai',
+  'dubai', 'doha', 'riyadh', 'tel aviv',
   'montréal', 'montreal', 'toronto', 'vancouver',
   // (Canadian cities are technically NA but if a CF incident is specifically
   // confined to Canada, it's unlikely to affect Aurora-routed traffic.)
@@ -1689,6 +1596,112 @@ function classifyCloudflareIncident(incidentName) {
   return 'ambiguous';
 }
 
+//=============================================================================
+// FETCHERS
+//=============================================================================
+
+// Helper: build a result object for a vendor whose scraper or API has broken.
+// "Breakage" is distinct from a vendor-reported outage. It means we tried to
+// read the source and either couldn't (network) or didn't recognize what we
+// got back (schema drift). The dot is slate with a wrench glyph; the tile
+// shows the underlying last-known severity in the incident detail line so
+// the reader can judge how stale that reading is.
+//
+// firstFailedAt comes from the snapshot file (scraped vendors) and persists
+// across workflow runs, so we can show "broken since 6h ago." For runtime
+// fetches (Statuspage/Instatus), pass null and it'll just say "broken now."
+function buildBreakageResult({ vendorPageLabel, lastKnownSeverity, lastSuccessfulParse,
+                                firstFailedAt, errorMessage, updatedAt }) {
+  const lastKnownLabel = lastKnownSeverity && lastKnownSeverity !== 'unknown'
+    ? severityLabel(lastKnownSeverity).toLowerCase()
+    : null;
+
+  let detail;
+  if (lastKnownLabel && lastSuccessfulParse) {
+    detail = 'Last good reading: ' + lastKnownLabel + ' (' + formatTimestamp(lastSuccessfulParse) + ')';
+  } else if (lastKnownLabel) {
+    detail = 'Last good reading: ' + lastKnownLabel;
+  } else {
+    detail = 'No prior good reading available';
+  }
+
+  return {
+    severity: 'breakage',
+    statusText: 'Status check broken — open ' + vendorPageLabel + ' to verify',
+    incident: {
+      name: detail,
+      status: errorMessage || 'Could not parse source',
+      updatedAt: firstFailedAt || null
+    },
+    updatedAt: updatedAt || new Date().toISOString(),
+    breakage: true
+  };
+}
+
+// Atlassian Statuspage v2 status indicators:
+//   none    -> all good
+//   minor   -> degraded
+//   major   -> partial outage
+//   critical-> major outage
+async function fetchStatuspage(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  // Schema validation: Atlassian Statuspage v2 has been stable for years, but
+  // if data.status.indicator is missing entirely, the response shape has drifted
+  // and we shouldn't quietly default to "unknown" (which renders as gray and
+  // looks like a network glitch). Surface as breakage so the reader knows the
+  // dashboard, not the vendor, is the problem.
+  const indicator = data.status?.indicator;
+  const knownIndicators = ['none', 'minor', 'major', 'critical', 'maintenance'];
+  if (!indicator || !knownIndicators.includes(indicator)) {
+    return buildBreakageResult({
+      vendorPageLabel: vendor.name + ' status page',
+      lastKnownSeverity: null,
+      lastSuccessfulParse: null,
+      firstFailedAt: null,
+      errorMessage: indicator
+        ? 'Unknown status indicator: "' + indicator + '"'
+        : 'status.indicator missing from API response',
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  const description = data.status?.description || severityLabel(mapStatuspageIndicator(indicator));
+  const updatedAt = data.page?.updated_at;
+
+  // Try to fetch unresolved incidents in parallel for richer display
+  let incident = null;
+  if (indicator !== 'none' && vendor.summaryUrl) {
+    try {
+      const sumRes = await fetch(vendor.summaryUrl, { cache: 'no-store' });
+      if (sumRes.ok) {
+        const sum = await sumRes.json();
+        const inc = (sum.incidents || []).find(i => i.status !== 'resolved');
+        if (inc) {
+          incident = {
+            name: inc.name,
+            status: inc.status,
+            updatedAt: inc.updated_at || inc.created_at
+          };
+        }
+      }
+    } catch (_) { /* non-fatal */ }
+  }
+
+  return {
+    severity: mapStatuspageIndicator(indicator),
+    statusText: description,
+    incident,
+    updatedAt
+  };
+}
+
+// Cloudflare wrapper around fetchStatuspage. Calls the underlying Statuspage
+// fetcher, then post-processes the result to filter out incidents that don't
+// affect RJ. See CLOUDFLARE INCIDENT FILTERING block above for the full
+// classification logic and rationale.
 async function fetchCloudflare(vendor) {
   // Get the standard Statuspage result first.
   const result = await fetchStatuspage(vendor);
@@ -1723,13 +1736,6 @@ async function fetchCloudflare(vendor) {
       // can still see what Cloudflare is reporting.
       name: result.incident.name,
     }
-  };
-}
-  return {
-    severity: mapStatuspageIndicator(indicator),
-    statusText: description,
-    incident,
-    updatedAt
   };
 }
 
@@ -3370,6 +3376,10 @@ document.querySelectorAll('.audience-btn').forEach(btn => {
     applyAudienceFilter(btn.dataset.audience);
   });
 });
+
+// Reflect the persisted audience on initial paint so the active button is
+// highlighted before the first refresh completes.
+syncAudienceButtonState();
 
 // Initial load
 refreshAll();
