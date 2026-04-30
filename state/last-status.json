@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-04-30T10:01:46.714Z",
+  "checkedAt": "2026-04-30T11:50:40.753Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -13,7 +13,7 @@
     "copyleaks": "operational",
     "aws": "major",
     "explorelearning": "unknown",
-    "ixl": "breakage",
+    "ixl": "operational",
     "quizizz": "operational",
     "gimkit": "operational",
     "soundtrap": "unknown",
