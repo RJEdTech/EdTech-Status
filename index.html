@@ -1295,23 +1295,26 @@ const VENDORS = [
     pageUrl: 'https://health.aws.amazon.com/health/status',
     whatItDoes: 'Amazon\'s cloud — hosts Canvas, Blackbaud\'s K-12 products (SIS, Academic Module), NoRedInk, Quizizz, and many other vendors above. Blackbaud\'s K-12 line specifically runs in us-east-1.',
     whenDown: 'Whatever\'s hosted on the affected AWS region goes down with it. This tile is context — check it when a primary tool is also red.'},
-  // Cloudflare uses Atlassian Statuspage v2 with a public CORS-enabled API,
-  // so we fetch it directly in the browser — no GitHub Action needed. Reuses
-  // the same fetchStatuspage() code path as Canvas, Blackbaud, etc.
+  // Cloudflare uses Atlassian Statuspage v2, but unlike other Statuspage
+  // tiles we don't dispatch directly to fetchStatuspage(). Instead we use
+  // type 'cloudflare', which calls fetchStatuspage() under the hood and
+  // then post-processes the result to filter out incidents that don't
+  // affect RJ services. See fetchCloudflare() and the CF_FILTER constants
+  // for the full classification logic and rationale.
   {
     id: 'cloudflare',
     task: 'infra',
     category: 'infra',
     name: 'Cloudflare',
-    sub: 'Fronts many of our vendor sites',
+    sub: 'Fronts many vendor sites — most CF incidents don\'t affect RJ',
     tier: 'infra',
     audience: ['teaching', 'operations'],
-    type: 'statuspage',
+    type: 'cloudflare',
     apiUrl: 'https://www.cloudflarestatus.com/api/v2/status.json',
     summaryUrl: 'https://www.cloudflarestatus.com/api/v2/summary.json',
     pageUrl: 'https://www.cloudflarestatus.com/',
-    whatItDoes: 'Routes and protects traffic for many vendor sites — sits between us and them.',
-    whenDown: 'Vendors fronted by Cloudflare may become unreachable, slow, or throw errors. Like AWS, this is context — check it when a primary tool is also red.'},
+    whatItDoes: 'Routes and protects traffic for many vendor sites — sits between us and them. Cloudflare\'s status page reports issues across hundreds of products and global regions; most have no effect on RJ classrooms. The dashboard filters incidents and highlights only the ones likely to affect RJ.',
+    whenDown: 'Only matters if a primary tool (Canvas, NoRedInk, Quizizz) is also red. Cloudflare yellow on its own — especially for products like Access, WARP, Zero Trust, Workers, R2, Pages, Stream, or non-NA datacenters — does not affect RJ teaching tools.'},
 
   // ============================================================
   // OPERATIONS — institutional systems beyond the classroom
@@ -1540,7 +1543,188 @@ async function fetchStatuspage(vendor) {
       }
     } catch (_) { /* non-fatal */ }
   }
+//=============================================================================
+// CLOUDFLARE INCIDENT FILTERING
+//=============================================================================
+// RJ doesn't use Cloudflare directly — we feel CF outages only when they hit
+// products that vendor sites we DO use (Canvas, NoRedInk, Quizizz) depend on.
+// Cloudflare's status page reports issues across hundreds of products and
+// regions globally. Most are noise from RJ's perspective.
+//
+// fetchCloudflare() calls fetchStatuspage() to get the standard result, then
+// classifies the active incident name into one of three buckets:
+//
+//   'rj-impacting'     → tile renders the Cloudflare-reported severity as-is
+//   'rj-not-impacting' → tile keeps the CF severity but rewrites status text
+//                        to clarify that RJ services aren't affected
+//   'ambiguous'        → conservative default, treated as rj-impacting
+//
+// Tuning principle: false negatives (missing a real outage) are worse than
+// false positives (flagging unnecessarily). When in doubt, classify as
+// impacting.
+//
+// VIVI NOTE: Vivi (classroom display) is on AWS but we have not confirmed
+// whether it's also fronted by Cloudflare. If a real-world correlation is
+// observed (Cloudflare yellow + Vivi degraded simultaneously), add Vivi
+// to VENDOR_DEPS_CF and reconsider the dependency map.
+//
+// TURNSTILE NOTE: Cloudflare Turnstile (CAPTCHA) can be embedded in third-
+// party sites. No RJ vendor is known to use it on login screens, so it's
+// classified as not-impacting. If a vendor (e.g., a future tool) starts
+// using Turnstile, revisit.
 
+// Keywords that indicate the incident WOULD affect RJ. If any of these
+// match the incident name, classify as rj-impacting.
+const CF_IMPACTING_KEYWORDS = [
+  // Core proxy / network path — directly carries vendor traffic
+  'cdn', 'cache', 'network performance',
+  'authoritative dns', 'recursive dns', 'dns updates', 'dns firewall',
+  ' dns ',  // catches "DNS Issues" but not "Authoritative DNS" already matched
+  'ssl certificate', 'ssl for saas', 'certificate provisioning',
+  'rules', 'firewall', 'waf',
+  'challenge platform',
+  'load balanc',
+  'spectrum', 'websockets',
+  'always online',
+  'ddos',
+  // Generic geographic indicators that imply NA impact
+  'united states', 'us east', 'us west', 'us central',
+  'eastern region', 'central region', 'western region',
+  'north america',
+  // North American POPs in plausible Aurora, CO routing path
+  'denver', '(den)',
+  'dallas', '(dfw)',
+  'salt lake', '(slc)',
+  'chicago', '(ord)',
+  'ashburn', '(iad)',
+  'atlanta', '(atl)',
+  'kansas city', '(mci)',
+  'phoenix', '(phx)',
+  'los angeles', '(lax)',
+  'san jose', '(sjc)',
+  'san francisco', '(sfo)',
+  'seattle', '(sea)',
+  'newark', '(ewr)',
+  'miami', '(mia)',
+  'minneapolis', '(msp)',
+  'st. louis', '(stl)',
+];
+
+// Keywords that indicate the incident DOES NOT affect RJ. Used only when
+// no impacting keyword has matched (impacting takes priority).
+const CF_NOT_IMPACTING_KEYWORDS = [
+  // Zero Trust suite — RJ uses Microsoft Entra, not Cloudflare Access
+  'access', 'warp', 'zero trust', 'tunnel',
+  'browser isolation', 'casb', 'dlp', 'dex',
+  'gateway', 'cloudflare one',
+  // Developer platform — no RJ vendor uses these in user-visible ways
+  'workers', 'wrangler', 'durable object', 'd1', 'r2', 'kv',
+  'queues', 'hyperdrive', 'vectorize', 'workflows',
+  // Media products
+  'stream', 'image', 'mirage',
+  // Static hosting (RJ uses GitHub Pages, not Cloudflare Pages)
+  'pages',
+  // Email / brand / page protection — not on RJ traffic path
+  'email routing', 'email security', 'area 1', 'brand protection',
+  'page shield',
+  // Turnstile (CAPTCHA) — no known RJ vendor uses it
+  'turnstile',
+  // Customer-facing CF infrastructure (we're not a CF customer)
+  'registrar', 'rdap', 'billing', 'subscription',
+  'dashboard', 'api shield',
+  'analytics', 'observatory', 'radar', 'trace', 'audit log',
+  // Enterprise networking
+  'magic transit', 'cni', 'wan', 'cloud network interconnect',
+  'bring your own ip', 'byoip',
+  // Realtime / WebRTC
+  'realtime',
+  // Marketing / docs / support sites
+  'marketing site', 'support site', 'community site', 'developer\'s site',
+];
+
+// Non-North-American cities that appear in CF incident titles. If any of
+// these match AND no impacting keyword matched, classify as not-impacting.
+// (We don't enumerate every CF POP — just enough to filter the common
+// non-NA incidents that show up in practice.)
+const CF_NON_NA_CITIES = [
+  'mumbai', 'bombay', 'bangalore', 'chennai', 'delhi', 'kolkata', 'hyderabad',
+  'singapore', 'jakarta', 'manila', 'bangkok', 'hanoi', 'ho chi minh',
+  'hong kong', 'taipei', 'seoul', 'tokyo', 'osaka',
+  'sydney', 'melbourne', 'brisbane', 'perth', 'auckland',
+  'london', 'paris', 'frankfurt', 'amsterdam', 'madrid', 'milan', 'rome',
+  'berlin', 'vienna', 'warsaw', 'prague', 'stockholm', 'oslo', 'helsinki',
+  'lisbon', 'dublin', 'zurich', 'brussels', 'copenhagen',
+  'istanbul', 'moscow', 'kyiv',
+  'são paulo', 'sao paulo', 'rio de janeiro', 'buenos aires', 'santiago',
+  'bogot', 'lima', 'caracas',
+  'cape town', 'johannesburg', 'lagos', 'nairobi', 'cairo',
+  'dubai', 'doha', 'riyadh', 'tel aviv', 'mumbai',
+  'montréal', 'montreal', 'toronto', 'vancouver',
+  // (Canadian cities are technically NA but if a CF incident is specifically
+  // confined to Canada, it's unlikely to affect Aurora-routed traffic.)
+];
+
+// Classify a Cloudflare incident name. Returns one of:
+//   'rj-impacting' | 'rj-not-impacting' | 'ambiguous'
+function classifyCloudflareIncident(incidentName) {
+  if (!incidentName) return 'ambiguous';
+  const name = incidentName.toLowerCase();
+
+  // Impacting keywords win — if any match, classify as impacting.
+  for (const kw of CF_IMPACTING_KEYWORDS) {
+    if (name.includes(kw)) return 'rj-impacting';
+  }
+
+  // No impacting match. Check for explicit non-impacting keywords.
+  for (const kw of CF_NOT_IMPACTING_KEYWORDS) {
+    if (name.includes(kw)) return 'rj-not-impacting';
+  }
+
+  // Check for non-NA city mentions (also non-impacting).
+  for (const city of CF_NON_NA_CITIES) {
+    if (name.includes(city)) return 'rj-not-impacting';
+  }
+
+  // Nothing matched — be conservative.
+  return 'ambiguous';
+}
+
+async function fetchCloudflare(vendor) {
+  // Get the standard Statuspage result first.
+  const result = await fetchStatuspage(vendor);
+
+  // If Cloudflare reports operational (no incident), nothing to filter.
+  if (result.severity === 'operational' || !result.incident) {
+    return result;
+  }
+
+  // If the result is already breakage (schema validation failed), pass through.
+  if (result.breakage) {
+    return result;
+  }
+
+  // Classify the active incident.
+  const classification = classifyCloudflareIncident(result.incident.name);
+
+  if (classification === 'rj-impacting' || classification === 'ambiguous') {
+    // Render as Cloudflare reports it. No change.
+    return result;
+  }
+
+  // classification === 'rj-not-impacting':
+  // Keep the CF-reported severity (Option A — don't downgrade to green),
+  // but rewrite the status text to clarify RJ isn't affected.
+  return {
+    ...result,
+    statusText: 'Cloudflare reporting issues — not affecting RJ teaching tools',
+    incident: {
+      ...result.incident,
+      // Preserve the original name in the incident detail so the reader
+      // can still see what Cloudflare is reporting.
+      name: result.incident.name,
+    }
+  };
+}
   return {
     severity: mapStatuspageIndicator(indicator),
     statusText: description,
@@ -3007,6 +3191,7 @@ function decorateInfraTile(tileElement, infraVendor, results, correlations) {
 async function fetchVendor(vendor) {
   switch (vendor.type) {
     case 'statuspage':       return fetchStatuspage(vendor);
+    case 'cloudflare':       return fetchCloudflare(vendor);
     case 'instatus':         return fetchInstatus(vendor);
     case 'elsnapshot':       return fetchExploreLearning(vendor);
     case 'ixlsnapshot':      return fetchIXL(vendor);
