@@ -21,6 +21,7 @@ jobs:
         run: |
           node <<'EOF'
           const https = require('https');
+          const zlib = require('zlib');
           const fs = require('fs');
 
           const PAGE_URL = 'https://status.ixl.com/';
@@ -31,18 +32,25 @@ jobs:
           // by bot management and may receive a stripped-down or challenge page.
           // The combination below mimics a real Chrome request closely enough to
           // pass routine bot scoring.
+          //
+          // We accept gzip/deflate/br because Cloudflare doesn't reliably honor
+          // 'Accept-Encoding: identity' — it sometimes returns compressed bodies
+          // anyway, which previously caused parse failures (the body looked like
+          // binary noise and didn't match our markers). zlib decompresses below.
           const REQUEST_HEADERS = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'identity',
+            'Accept-Encoding': 'gzip, deflate, br',
             'Cache-Control': 'no-cache'
           };
 
-          // Minimum plausible response size. The real page is ~10KB+; anything
-          // significantly smaller is almost certainly a truncated stream, an
-          // edge cache miss, or a Cloudflare interstitial.
-          const MIN_RESPONSE_BYTES = 5000;
+          // Sanity floor for response size. The IXL page has only one component
+          // and zero incidents, so the props blob is small — minimal valid
+          // responses can be ~4 KB. We keep a low floor only to reject obvious
+          // garbage (truncated streams, empty responses). The real integrity
+          // check is the marker regex in fetchWithRetry.
+          const MIN_RESPONSE_BYTES = 1500;
 
           // Per-request timeout. If the connection stalls, we'd rather fail
           // fast and let the retry loop try again than hang the whole job.
@@ -55,15 +63,34 @@ jobs:
                   reject(new Error('HTTP ' + res.statusCode));
                   return;
                 }
+
+                // Decompress based on Content-Encoding. Log the encoding and
+                // declared length so future failures are debuggable from the
+                // run output alone.
+                const encoding = (res.headers['content-encoding'] || '').toLowerCase();
+                const declaredLength = res.headers['content-length'] || '(none)';
+                console.log('Content-Encoding:', encoding || '(none)', '| Content-Length:', declaredLength);
+
+                let stream = res;
+                if (encoding === 'gzip') {
+                  stream = res.pipe(zlib.createGunzip());
+                } else if (encoding === 'deflate') {
+                  stream = res.pipe(zlib.createInflate());
+                } else if (encoding === 'br') {
+                  stream = res.pipe(zlib.createBrotliDecompress());
+                }
+
                 let body = '';
-                res.on('data', (chunk) => body += chunk);
-                res.on('end', () => {
+                stream.setEncoding('utf8');
+                stream.on('data', (chunk) => body += chunk);
+                stream.on('end', () => {
                   if (body.length < MIN_RESPONSE_BYTES) {
-                    reject(new Error('Response too short: ' + body.length + ' bytes'));
+                    reject(new Error('Response too short: ' + body.length + ' bytes (encoding=' + (encoding || 'none') + ')'));
                     return;
                   }
                   resolve(body);
                 });
+                stream.on('error', reject);
                 res.on('error', reject);
               });
               req.on('timeout', () => {
