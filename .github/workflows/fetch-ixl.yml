@@ -26,17 +26,50 @@ jobs:
           const PAGE_URL = 'https://status.ixl.com/';
           const OUT_PATH = 'ixl.json';
 
+          // Use a realistic browser User-Agent and full request headers.
+          // status.ixl.com sits behind Cloudflare; a non-browser UA gets flagged
+          // by bot management and may receive a stripped-down or challenge page.
+          // The combination below mimics a real Chrome request closely enough to
+          // pass routine bot scoring.
+          const REQUEST_HEADERS = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'identity',
+            'Cache-Control': 'no-cache'
+          };
+
+          // Minimum plausible response size. The real page is ~10KB+; anything
+          // significantly smaller is almost certainly a truncated stream, an
+          // edge cache miss, or a Cloudflare interstitial.
+          const MIN_RESPONSE_BYTES = 5000;
+
+          // Per-request timeout. If the connection stalls, we'd rather fail
+          // fast and let the retry loop try again than hang the whole job.
+          const REQUEST_TIMEOUT_MS = 15000;
+
           function fetchUrl(url) {
             return new Promise((resolve, reject) => {
-              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
+              const req = https.get(url, { headers: REQUEST_HEADERS, timeout: REQUEST_TIMEOUT_MS }, (res) => {
                 if (res.statusCode !== 200) {
                   reject(new Error('HTTP ' + res.statusCode));
                   return;
                 }
                 let body = '';
                 res.on('data', (chunk) => body += chunk);
-                res.on('end', () => resolve(body));
-              }).on('error', reject);
+                res.on('end', () => {
+                  if (body.length < MIN_RESPONSE_BYTES) {
+                    reject(new Error('Response too short: ' + body.length + ' bytes'));
+                    return;
+                  }
+                  resolve(body);
+                });
+                res.on('error', reject);
+              });
+              req.on('timeout', () => {
+                req.destroy(new Error('Request timeout after ' + REQUEST_TIMEOUT_MS + 'ms'));
+              });
+              req.on('error', reject);
             });
           }
 
@@ -51,6 +84,11 @@ jobs:
               try {
                 const html = await fetchUrl(url);
                 if (!/global_is_operational|StatusPageDisplayController/i.test(html)) {
+                  // Log diagnostic context so future failures are debuggable
+                  // without having to add logging after the fact.
+                  console.log('Marker miss. HTML length: ' + html.length);
+                  console.log('First 500 chars: ' + html.substring(0, 500));
+                  console.log('Last 500 chars: ' + html.substring(Math.max(0, html.length - 500)));
                   throw new Error('Page does not contain expected Uptime.com markers');
                 }
                 return html;
@@ -159,7 +197,7 @@ jobs:
               console.log('HTML length:', html.length);
               console.log('Contains global_is_operational:', html.includes('global_is_operational'));
               const parsed = parseStatus(html);
-              
+
               const now = new Date().toISOString();
               const newContent = {
                 source: PAGE_URL,
