@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-04-30T16:20:24.742Z",
+  "fetchedAt": "2026-04-30T16:42:34.644Z",
   "source": "https://status.ixl.com/",
   "severity": "operational",
   "isOperational": true,
@@ -7,6 +7,9 @@
   "isCritical": false,
   "incidentCount": 0,
   "firstIncidentName": "",
-  "parseError": null,
+  "parseError": {
+    "message": "Failed after 3 attempts: Response too short: 4255 bytes",
+    "firstFailedAt": "2026-04-30T16:42:34.644Z"
+  },
   "lastSuccessfulParse": "2026-04-30T16:20:24.742Z"
 }
