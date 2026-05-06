@@ -1,7 +1,10 @@
 {
-  "fetchedAt": "2026-05-06T21:46:57.625Z",
+  "fetchedAt": "2026-05-06T22:35:50.242Z",
   "source": "https://statuspage.freshping.io/621-QuizizzStatusPage/",
   "severity": "operational",
-  "parseError": null,
+  "parseError": {
+    "message": "HTTP 503",
+    "firstFailedAt": "2026-05-06T22:35:50.242Z"
+  },
   "lastSuccessfulParse": "2026-05-06T21:46:57.625Z"
 }
