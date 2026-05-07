@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-05-06T23:26:55.709Z",
+  "checkedAt": "2026-05-07T00:12:01.276Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "degraded",
@@ -14,7 +14,7 @@
     "aws": "operational",
     "explorelearning": "unknown",
     "ixl": "operational",
-    "quizizz": "breakage",
+    "quizizz": "operational",
     "gimkit": "operational",
     "soundtrap": "unknown",
     "noredink": "operational",
