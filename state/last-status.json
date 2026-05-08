@@ -1,9 +1,9 @@
 {
-  "checkedAt": "2026-05-08T20:53:14.757Z",
+  "checkedAt": "2026-05-08T21:54:46.500Z",
   "vendors": {
     "instructure": "degraded",
     "blackbaud": "operational",
-    "vivi": "degraded",
+    "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
     "aspiredu": "operational",
@@ -12,14 +12,14 @@
     "cloudflare": "degraded",
     "copyleaks": "operational",
     "aws": "partial",
-    "explorelearning": "breakage",
+    "explorelearning": "unknown",
     "ixl": "operational",
     "quizizz": "operational",
     "gimkit": "operational",
     "soundtrap": "unknown",
     "noredink": "operational",
     "finalsite": "operational",
-    "arbitersports": "degraded",
+    "arbitersports": "operational",
     "rj-website": "operational",
     "myrj": "operational"
   }
