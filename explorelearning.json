@@ -1,10 +1,7 @@
 {
-  "fetchedAt": "2026-05-08T20:42:48.830Z",
+  "fetchedAt": "2026-05-08T21:41:55.257Z",
   "source": "https://www.explorelearning.com/our-products/site-status",
   "status": "operational",
-  "parseError": {
-    "message": "Neither operational marker nor id=\"site-status-a-ok\" found on the page — ExploreLearning may have redesigned the status page or changed the URL.",
-    "firstFailedAt": "2026-05-08T20:42:48.830Z"
-  },
-  "lastSuccessfulParse": "2026-05-08T19:47:59.748Z"
+  "parseError": null,
+  "lastSuccessfulParse": "2026-05-08T21:41:55.257Z"
 }
