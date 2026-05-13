@@ -946,11 +946,12 @@ const SECTIONS = {
     { id: 'infra',      label: 'Behind the scenes',     note: 'Infrastructure that runs the tools above — only matters if those go red too', categories: ['vendor-platform', 'infra'] }
   ],
   operations: [
-    { id: 'daily',          label: 'Daily systems',     note: 'Sign-in and platforms used every day', categories: ['signin', 'lms-core'] },
-    { id: 'public',         label: 'Public-facing',     note: 'External websites and services', categories: ['public-site'] },
-    { id: 'athletics',      label: 'Athletics',         note: 'Athletic department systems', categories: ['athletics'] },
-    { id: 'vendor-platforms', label: 'Vendor platforms', note: 'Underlying platforms that power the systems above', categories: ['vendor-platform'] },
-    { id: 'infra',          label: 'Behind the scenes', note: 'Infrastructure that the platforms above run on', categories: ['infra'] }
+    { id: 'daily',            label: 'Daily systems',          note: 'Sign-in and platforms used every day', categories: ['signin', 'lms-core'] },
+    { id: 'safety',           label: 'Safety & communication', note: 'Emergency notifications and safety systems', categories: ['safety-ops'] },
+    { id: 'public',           label: 'Public-facing',          note: 'External websites and services', categories: ['public-site'] },
+    { id: 'athletics',        label: 'Athletics',              note: 'Athletic department systems', categories: ['athletics'] },
+    { id: 'vendor-platforms', label: 'Vendor platforms',       note: 'Underlying platforms that power the systems above', categories: ['vendor-platform'] },
+    { id: 'infra',            label: 'Behind the scenes',      note: 'Infrastructure that the platforms above run on', categories: ['infra'] }
   ],
   // 'all' uses teaching sections + an operations catchall. Built dynamically
   // in getSectionsForAudience() rather than declared here, because we want
@@ -1409,6 +1410,29 @@ const VENDORS = [
     pageUrl: 'https://regisjesuit.myschoolapp.com/app/faculty?svcid=edu',
     whatItDoes: 'Blackbaud Education Management login for faculty — attendance, grades, parent communication, Grade School LMS. We follow the redirect chain to confirm the Blackbaud sign-in page loads. (We stop short of Microsoft sign-in because that\'s already covered by the Microsoft 365 tile.)',
     whenDown: 'Faculty can\'t log in to take attendance, post grades, or access the Grade School LMS. Workaround: email attendance directly to the Dean\'s office. If sign-in is the failure mode, check Microsoft sign-in for an upstream cause.'
+  },
+
+  // Ruvna — emergency notification system + attendance. RJ uses it to push
+  // lockdown, lockout, shelter-in-place, and drill comms, plus teacher
+  // attendance taking. Standard Atlassian Statuspage — same code path as
+  // Canvas, Vivi, Blackbaud. Tier 'core' because workarounds exist:
+  // intercom/PA for emergency comms, email for attendance. Significant
+  // impact when down, but teaching continues.
+  {
+    id: 'ruvna',
+    task: 'operations',
+    category: 'safety-ops',
+    name: 'Ruvna',
+    sub: 'Emergency notifications and attendance',
+    tier: 'core',
+    audience: ['teaching', 'operations'],
+    type: 'statuspage',
+    apiUrl: 'https://status.ruvna.com/api/v2/status.json',
+    summaryUrl: 'https://status.ruvna.com/api/v2/summary.json',
+    pageUrl: 'https://status.ruvna.com/',
+    whatItDoes: 'Our emergency notification system and a secondary attendance channel. How the school pushes lockdown, lockout, shelter-in-place, and drill comms to students, staff, and families. Also used by teachers to take attendance.',
+    whenDown: 'Teaching continues, but workarounds are needed: emergency communication falls back to the intercom/PA, and teachers email attendance to the Dean\'s office. Verify Ruvna with a test send before relying on it during a known drill or event.',
+    extraLink: { label: 'Uptime history', url: 'https://status.ruvna.com/uptime' }
   }
 ];
 
