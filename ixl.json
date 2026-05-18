@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-05-17T23:59:31.177Z",
+  "fetchedAt": "2026-05-18T03:38:06.827Z",
   "source": "https://status.ixl.com/",
   "severity": "operational",
   "isOperational": true,
@@ -8,5 +8,5 @@
   "incidentCount": 0,
   "firstIncidentName": "",
   "parseError": null,
-  "lastSuccessfulParse": "2026-05-17T23:59:31.177Z"
+  "lastSuccessfulParse": "2026-05-18T03:38:06.827Z"
 }
