@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-05-22T23:40:56.994Z",
+  "fetchedAt": "2026-05-23T01:25:48.164Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
-  "severity": "operational",
-  "activeCount": 0,
-  "firstIncidentTitle": "",
+  "severity": "partial",
+  "activeCount": 2,
+  "firstIncidentTitle": "<![CDATA[Service is operating normally: [RESOLVED] Increased API Error Rates]]>",
   "parseError": null,
-  "lastSuccessfulParse": "2026-05-22T23:40:56.994Z"
+  "lastSuccessfulParse": "2026-05-23T01:25:48.164Z"
 }
