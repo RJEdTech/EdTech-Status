@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-05-25T23:52:36.048Z",
+  "fetchedAt": "2026-05-26T01:47:56.628Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
   "severity": "operational",
   "activeCount": 0,
   "firstIncidentTitle": "",
   "parseError": null,
-  "lastSuccessfulParse": "2026-05-25T23:52:36.048Z"
+  "lastSuccessfulParse": "2026-05-26T01:47:56.628Z"
 }
