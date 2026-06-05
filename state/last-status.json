@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-06-05T22:11:44.338Z",
+  "checkedAt": "2026-06-05T23:39:17.665Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -21,6 +21,6 @@
     "finalsite": "operational",
     "arbitersports": "operational",
     "rj-website": "operational",
-    "myrj": "operational"
+    "myrj": "partial"
   }
 }
