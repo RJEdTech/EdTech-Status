@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-06-08T18:34:50.266Z",
+  "checkedAt": "2026-06-08T21:02:53.782Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -9,7 +9,7 @@
     "aspiredu": "operational",
     "kahoot": "operational",
     "deltamath": "operational",
-    "cloudflare": "partial",
+    "cloudflare": "degraded",
     "copyleaks": "operational",
     "aws": "operational",
     "explorelearning": "unknown",
@@ -18,7 +18,7 @@
     "gimkit": "operational",
     "soundtrap": "unknown",
     "noredink": "operational",
-    "finalsite": "unknown",
+    "finalsite": "operational",
     "arbitersports": "operational",
     "rj-website": "operational",
     "myrj": "operational"
