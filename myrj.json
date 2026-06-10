@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-06-10T01:38:09.105Z",
+  "fetchedAt": "2026-06-10T06:05:02.766Z",
   "source": "synthetic-check",
   "target": "https://regisjesuit.myschoolapp.com/app/faculty?svcid=edu",
-  "severity": "partial",
-  "statusLabel": "Login broken",
-  "statusDetail": "HTTP 403",
+  "severity": "operational",
+  "statusLabel": "Operating normally",
+  "statusDetail": null,
   "parseError": null,
-  "lastSuccessfulParse": "2026-06-10T01:38:09.105Z"
+  "lastSuccessfulParse": "2026-06-10T06:05:02.766Z"
 }
