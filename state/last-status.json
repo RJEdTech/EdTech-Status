@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-06-11T11:19:31.840Z",
+  "checkedAt": "2026-06-11T14:58:57.249Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "operational",
+    "blackbaud": "degraded",
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
@@ -18,7 +18,7 @@
     "gimkit": "operational",
     "soundtrap": "unknown",
     "noredink": "operational",
-    "finalsite": "operational",
+    "finalsite": "unknown",
     "arbitersports": "operational",
     "rj-website": "operational",
     "myrj": "operational"
