@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-06-12T08:47:59.720Z",
+  "checkedAt": "2026-06-12T12:04:04.612Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -17,7 +17,7 @@
     "quizizz": "operational",
     "gimkit": "operational",
     "soundtrap": "unknown",
-    "noredink": "breakage",
+    "noredink": "operational",
     "finalsite": "operational",
     "arbitersports": "operational",
     "rj-website": "operational",
