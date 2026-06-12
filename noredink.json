@@ -1,11 +1,8 @@
 {
-  "fetchedAt": "2026-06-12T06:17:57.788Z",
+  "fetchedAt": "2026-06-12T10:43:05.672Z",
   "source": "https://noredinkstatus.com/",
   "severity": "operational",
   "banner": "All Systems Operational",
-  "parseError": {
-    "message": "HTTP 403",
-    "firstFailedAt": "2026-06-12T06:17:57.788Z"
-  },
-  "lastSuccessfulParse": "2026-06-12T01:38:36.441Z"
+  "parseError": null,
+  "lastSuccessfulParse": "2026-06-12T10:43:05.672Z"
 }
