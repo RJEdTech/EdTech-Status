@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-06-13T04:45:26.170Z",
+  "fetchedAt": "2026-06-13T08:12:33.903Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
-  "severity": "partial",
-  "activeCount": 1,
-  "firstIncidentTitle": "<![CDATA[Service impact: Fable 5 and Mythos 5 Access]]>",
+  "severity": "operational",
+  "activeCount": 0,
+  "firstIncidentTitle": "",
   "parseError": null,
-  "lastSuccessfulParse": "2026-06-13T04:45:26.170Z"
+  "lastSuccessfulParse": "2026-06-13T08:12:33.903Z"
 }
