@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-06-15T23:15:31.377Z",
+  "checkedAt": "2026-06-16T01:47:55.632Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "degraded",
@@ -11,7 +11,7 @@
     "deltamath": "operational",
     "cloudflare": "degraded",
     "copyleaks": "operational",
-    "aws": "partial",
+    "aws": "operational",
     "explorelearning": "unknown",
     "ixl": "operational",
     "quizizz": "operational",
