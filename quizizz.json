@@ -1,7 +1,10 @@
 {
-  "fetchedAt": "2026-06-17T05:06:27.581Z",
+  "fetchedAt": "2026-06-17T10:00:58.337Z",
   "source": "https://statuspage.freshping.io/621-QuizizzStatusPage/",
   "severity": "operational",
-  "parseError": null,
+  "parseError": {
+    "message": "Page loaded but no known status banner found — Freshping may have changed the wording or added a new state.",
+    "firstFailedAt": "2026-06-17T10:00:58.337Z"
+  },
   "lastSuccessfulParse": "2026-06-17T05:06:27.581Z"
 }
