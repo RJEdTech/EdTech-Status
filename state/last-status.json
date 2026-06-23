@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-06-23T22:01:12.179Z",
+  "checkedAt": "2026-06-23T23:18:02.339Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "operational",
+    "blackbaud": "degraded",
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
