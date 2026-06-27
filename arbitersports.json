@@ -1,13 +1,13 @@
 {
-  "fetchedAt": "2026-06-27T11:19:26.730Z",
+  "fetchedAt": "2026-06-27T12:48:47.272Z",
   "source": "synthetic-check",
-  "severity": "degraded",
+  "severity": "operational",
   "services": [
     {
       "name": "Login flow",
-      "severity": "degraded",
-      "label": "Unexpected page content",
-      "detail": "Expected B2C tenant identifier missing from response — login page may be misconfigured or replaced."
+      "severity": "operational",
+      "label": "Operating normally",
+      "detail": null
     },
     {
       "name": "Application",
@@ -17,5 +17,5 @@
     }
   ],
   "parseError": null,
-  "lastSuccessfulParse": "2026-06-27T11:19:26.730Z"
+  "lastSuccessfulParse": "2026-06-27T12:48:47.272Z"
 }
