@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-06-30T00:18:20.069Z",
+  "fetchedAt": "2026-06-30T04:36:19.701Z",
   "source": "https://status.ixl.com/",
   "severity": "operational",
   "isOperational": true,
@@ -7,6 +7,9 @@
   "isCritical": false,
   "incidentCount": 0,
   "firstIncidentName": "",
-  "parseError": null,
+  "parseError": {
+    "message": "Failed after 3 attempts: self-signed certificate",
+    "firstFailedAt": "2026-06-30T04:36:19.701Z"
+  },
   "lastSuccessfulParse": "2026-06-30T00:18:20.069Z"
 }
