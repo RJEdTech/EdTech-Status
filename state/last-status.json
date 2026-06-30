@@ -1,11 +1,11 @@
 {
-  "checkedAt": "2026-06-30T18:52:40.363Z",
+  "checkedAt": "2026-06-30T20:54:06.986Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
     "vivi": "operational",
     "flint": "operational",
-    "respondus": "operational",
+    "respondus": "degraded",
     "aspiredu": "operational",
     "kahoot": "operational",
     "deltamath": "operational",
