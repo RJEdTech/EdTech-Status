@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-06-30T12:08:22.828Z",
+  "checkedAt": "2026-06-30T14:40:34.738Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -7,7 +7,7 @@
     "flint": "operational",
     "respondus": "operational",
     "aspiredu": "operational",
-    "kahoot": "degraded",
+    "kahoot": "operational",
     "deltamath": "operational",
     "cloudflare": "degraded",
     "copyleaks": "operational",
