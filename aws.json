@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-06-30T22:57:09.688Z",
+  "fetchedAt": "2026-07-01T00:03:56.128Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
   "severity": "partial",
   "activeCount": 4,
   "firstIncidentTitle": "<![CDATA[Service is operating normally: [RESOLVED] Increased Error Rates and Latencies]]>",
   "parseError": null,
-  "lastSuccessfulParse": "2026-06-30T22:57:09.688Z"
+  "lastSuccessfulParse": "2026-07-01T00:03:56.128Z"
 }
