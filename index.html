@@ -1182,10 +1182,11 @@ const VENDORS = [
     pageUrl: 'https://status.kahoot.com/',
     whatItDoes: 'Live game-based review and quizzing — students join from devices.',
     whenDown: 'Live games can\'t start; teachers usually pivot to a different review activity.'},
-  // Quizizz / Wayground (status page hosted on Freshping, no public unauthenticated
-  // JSON endpoint, so we scrape the rendered banner via GitHub Actions to quizizz.json).
-  // Note: Quizizz has been rebranded to "Wayground" but everyone still calls it Quizizz,
-  // so we label it Quizizz with a sub-line noting the rebrand.
+// Quizizz / Wayground. The old Freshping status page was decommissioned in June
+  // 2026 and there's no public first-party status page to read, so quizizz.json is
+  // now written by a reachability probe (fetch-quizizz.yml) that pings the student
+  // join page every 5 min and classifies by HTTP response. Still labelled "Quizizz"
+  // since that's what teachers call it; sub-line notes the "Wayground" rebrand.
   {
     id: 'quizizz',
     task: 'other',
@@ -1196,7 +1197,7 @@ const VENDORS = [
     audience: ['teaching'],
     type: 'quizizzsnapshot',
     apiUrl: 'quizizz.json',
-    pageUrl: 'https://statuspage.freshping.io/621-QuizizzStatusPage/',
+    pageUrl: 'https://wayground.com/join',
     whatItDoes: 'Game-based quizzing with self-paced and live modes. Recently rebranded "Wayground" but still commonly called Quizizz.',
     whenDown: 'Both live and homework-mode quizzes stop. Reports already generated remain viewable.'},
   // Gimkit (status page hosted on Crisp Status, no public unauthenticated JSON
@@ -1978,20 +1979,22 @@ async function fetchIXL(vendor) {
   };
 }
 
-// Quizizz / Wayground snapshot file:
-//   Written by the .github/workflows/fetch-quizizz.yml workflow every 5 minutes.
-//   Same-origin fetch, so no CORS issues.
-//   Quizizz's status page is hosted on Freshping, which has no public unauthenticated
-//   JSON endpoint. The workflow scrapes the rendered banner and maps to one of:
-//     'operational' | 'partial' | 'major' | 'maintenance'
+// Quizizz / Wayground reachability snapshot:
+//   Written by .github/workflows/fetch-quizizz.yml every 5 minutes. Same-origin
+//   fetch, so no CORS issues. The workflow no longer scrapes a status page (the old
+//   Freshping page is gone) — it probes wayground.com/join and records one of:
+//     'operational' | 'degraded' | 'major'   (+ optional 'detail' like "HTTP 200")
+//   A stale-probe-URL 4xx is recorded as data.parseError and rendered as breakage.
 async function fetchQuizizz(vendor) {
   const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
+  // Probe-target problem (e.g., wayground.com/join started returning 404):
+  // surface as breakage so it reads as OUR probe to fix, not a Wayground outage.
   if (data.parseError) {
     return buildBreakageResult({
-      vendorPageLabel: 'Quizizz status page',
+      vendorPageLabel: 'wayground.com/join',
       lastKnownSeverity: data.severity,
       lastSuccessfulParse: data.lastSuccessfulParse,
       firstFailedAt: data.parseError.firstFailedAt,
@@ -2000,45 +2003,34 @@ async function fetchQuizizz(vendor) {
     });
   }
 
-  // Map workflow severity to dashboard severity. The workflow uses 'maintenance'
-  // as a distinct state; we render that as 'degraded' (yellow) per existing
-  // convention (see mapStatuspageIndicator → maintenance returns 'degraded').
-  const rawSeverity = data.severity || 'operational';
-  const severity = rawSeverity === 'maintenance' ? 'degraded' : rawSeverity;
+  const severity = data.severity || 'operational';
+  const detail = data.detail || '';
 
   let statusText;
   let incident = null;
 
   switch (severity) {
     case 'operational':
-      statusText = 'All systems operational';
+      statusText = 'Reachable — join page responding';
       break;
     case 'degraded':
-      statusText = 'Maintenance in progress';
+      statusText = 'Reachable but throttled';
       incident = {
-        name: 'Quizizz is in scheduled maintenance',
-        status: 'See vendor status page',
-        updatedAt: null
-      };
-      break;
-    case 'partial':
-      statusText = 'Some systems are down';
-      incident = {
-        name: 'Quizizz is reporting an issue',
-        status: 'See vendor status page',
+        name: 'Wayground is rate-limiting requests',
+        status: detail || 'Students may see slow or failed loads',
         updatedAt: null
       };
       break;
     case 'major':
-      statusText = 'All systems are down';
+      statusText = 'Not responding — likely down';
       incident = {
-        name: 'Critical issue affecting Quizizz',
-        status: 'See vendor status page',
+        name: 'Wayground join page is unreachable',
+        status: detail ? ('Probe result: ' + detail) : 'See wayground.com/join',
         updatedAt: null
       };
       break;
     default:
-      statusText = 'Status unknown — see vendor page';
+      statusText = 'Status unknown — try wayground.com/join';
   }
 
   return {
