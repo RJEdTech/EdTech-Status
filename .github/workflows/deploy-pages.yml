@@ -1,0 +1,62 @@
+name: Deploy site to GitHub Pages
+
+# Custom Pages deploy that REPLACES GitHub's built-in "pages build and
+# deployment" branch pipeline. Why: the built-in pipeline redeploys on every
+# push to main and ignores [skip ci], so the scrapers' 5-minute JSON commits
+# jam the Pages deployment queue. This workflow instead fires ONLY on real
+# site-content changes — it ignores '**/*.json' (scraper data) and '.github/**'
+# (workflow edits) — so data commits never trigger a build.
+#
+# The dashboard reads its snapshot JSONs live from raw.githubusercontent.com
+# (see resolveDataUrl in index.html), so data stays fresh with zero deploys.
+#
+# Switch Settings -> Pages -> Build and deployment -> Source to "GitHub Actions"
+# for this to take over from the branch pipeline.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.json'
+      - '*.json'
+      - '.github/**'
+  workflow_dispatch:  # manual redeploy from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let deploys stack; cancel any in-flight run when a newer one starts.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        # Uploads the whole repo root. .git and .github are excluded
+        # automatically. The committed *.json snapshots are included but unused
+        # at runtime — the dashboard reads them live from raw instead.
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
