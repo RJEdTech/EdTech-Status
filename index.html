@@ -861,7 +861,7 @@
   <footer class="page-foot">
     <p><strong>How to use this page.</strong> Before troubleshooting a tool that isn't working, glance here. If the tile is red or yellow, the vendor is reporting a known issue — it's not just you. If the tile is green and you're still having trouble, the problem is real; status pages can lag actual outages by 30 minutes or more.</p>
     <p><strong>What the colors mean.</strong> <span style="color: var(--ok); font-weight: 600;">Green</span> = working. <span style="color: var(--warn); font-weight: 600;">Yellow</span> = degraded (slower or partial features). <span style="color: var(--alert); font-weight: 600;">Orange</span> = partial outage. <span style="color: var(--crit); font-weight: 600;">Red</span> = down. Slate with a wrench = our status check is broken (vendor itself may be fine; click through to verify).</p>
-    <p><strong>Why "Behind the scenes" exists.</strong> AWS and Cloudflare run a lot of the tools above (Canvas, NoRedInk, Quizizz, and others). When something at this layer breaks, it can take tools down with it. You generally don't need to look here unless one of the tools you're using has gone red — then check whether infrastructure is also red, which means the problem may not be with the tool itself.</p>
+    <p><strong>Why "Behind the scenes" exists.</strong> AWS and Cloudflare run a lot of the tools above (Canvas, NoRedInk, and others). When something at this layer breaks, it can take tools down with it. You generally don't need to look here unless one of the tools you're using has gone red — then check whether infrastructure is also red, which means the problem may not be with the tool itself.</p>
     <p>Built and maintained by Jason Beyer &middot; 
        <a href="https://github.com/RJEdTech/EdTech-Status" target="_blank" rel="noopener">View on GitHub</a> &middot;
        <a href="https://forms.microsoft.com/r/sKU9sHY45r" target="_blank" rel="noopener">Report a bug or request a tool</a></p>
@@ -1168,38 +1168,6 @@ const VENDORS = [
     pageUrl: 'https://status.ixl.com/',
     whatItDoes: 'Adaptive practice across math, ELA, science, and social studies. Auto-assigns based on student performance.',
     whenDown: 'Students can\'t complete assigned practice; previously earned progress is preserved.'},
-  {
-    id: 'kahoot',
-    task: 'other',
-    category: 'engagement-standalone',
-    name: 'Kahoot',
-    sub: 'Game-based learning',
-    tier: 'secondary',
-    audience: ['teaching'],
-    type: 'statuspage',
-    apiUrl: 'https://status.kahoot.com/api/v2/status.json',
-    summaryUrl: 'https://status.kahoot.com/api/v2/summary.json',
-    pageUrl: 'https://status.kahoot.com/',
-    whatItDoes: 'Live game-based review and quizzing — students join from devices.',
-    whenDown: 'Live games can\'t start; teachers usually pivot to a different review activity.'},
-// Quizizz / Wayground. The old Freshping status page was decommissioned in June
-  // 2026 and there's no public first-party status page to read, so quizizz.json is
-  // now written by a reachability probe (fetch-quizizz.yml) that pings the student
-  // join page every 5 min and classifies by HTTP response. Still labelled "Quizizz"
-  // since that's what teachers call it; sub-line notes the "Wayground" rebrand.
-  {
-    id: 'quizizz',
-    task: 'other',
-    category: 'engagement-standalone',
-    name: 'Quizizz',
-    sub: 'Now branded "Wayground"',
-    tier: 'secondary',
-    audience: ['teaching'],
-    type: 'quizizzsnapshot',
-    apiUrl: 'quizizz.json',
-    pageUrl: 'https://wayground.com/join',
-    whatItDoes: 'Game-based quizzing with self-paced and live modes. Recently rebranded "Wayground" but still commonly called Quizizz.',
-    whenDown: 'Both live and homework-mode quizzes stop. Reports already generated remain viewable.'},
   // Gimkit (status page hosted on Crisp Status, no public unauthenticated JSON
   // endpoint, so we scrape the rendered banner via GitHub Actions to gimkit.json)
   {
@@ -1286,13 +1254,13 @@ const VENDORS = [
     task: 'infra',
     category: 'infra',
     name: 'AWS',
-    sub: 'Amazon Web Services — hosts Canvas, Blackbaud (K-12), NoRedInk, Quizizz, more',
+    sub: 'Amazon Web Services — hosts Canvas, Blackbaud (K-12), NoRedInk, more',
     tier: 'infra',
     audience: ['teaching', 'operations'],
     type: 'awssnapshot',
     apiUrl: 'aws.json',
     pageUrl: 'https://health.aws.amazon.com/health/status',
-    whatItDoes: 'Amazon\'s cloud — hosts Canvas, Blackbaud\'s K-12 products (SIS, Academic Module), NoRedInk, Quizizz, and many other vendors above. Blackbaud\'s K-12 line specifically runs in us-east-1.',
+    whatItDoes: 'Amazon\'s cloud — hosts Canvas, Blackbaud\'s K-12 products (SIS, Academic Module), NoRedInk, and many other vendors above. Blackbaud\'s K-12 line specifically runs in us-east-1.',
     whenDown: 'Whatever\'s hosted on the affected AWS region goes down with it. This tile is context — check it when a primary tool is also red.'},
   // Cloudflare uses Atlassian Statuspage v2, but unlike other Statuspage
   // tiles we don't dispatch directly to fetchStatuspage(). Instead we use
@@ -1313,7 +1281,7 @@ const VENDORS = [
     summaryUrl: 'https://www.cloudflarestatus.com/api/v2/summary.json',
     pageUrl: 'https://www.cloudflarestatus.com/',
     whatItDoes: 'Routes and protects traffic for many vendor sites — sits between us and them. Cloudflare\'s status page reports issues across hundreds of products and global regions; most have no effect on RJ classrooms. The dashboard filters incidents and highlights only the ones likely to affect RJ.',
-    whenDown: 'Only matters if a primary tool (Canvas, NoRedInk, Quizizz) is also red. Cloudflare yellow on its own — especially for products like Access, WARP, Zero Trust, Workers, R2, Pages, Stream, or non-NA datacenters — does not affect RJ teaching tools.'},
+    whenDown: 'Only matters if a primary tool (Canvas, NoRedInk) is also red. Cloudflare yellow on its own — especially for products like Access, WARP, Zero Trust, Workers, R2, Pages, Stream, or non-NA datacenters — does not affect RJ teaching tools.'},
 
   // ============================================================
   // OPERATIONS — institutional systems beyond the classroom
@@ -1355,8 +1323,77 @@ const VENDORS = [
     type: 'arbitersnapshot',
     apiUrl: 'arbitersports.json',
     pageUrl: 'https://www1.arbitersports.com/ArbiterGame/Schedule',
-    whatItDoes: 'Athletic event management — schedules officials, payments, and game assignments. Used by the athletic department. We monitor the login flow (Microsoft B2C) and the application server independently because they can fail separately.',
+    whatItDoes: 'Athletic event management — schedules officials, payments, and game assignments. Used by the athletic department (including Arbiter Athlete, which shares the same login and platform). We monitor the login flow (Microsoft B2C) and the application server independently because they can fail separately.',
     whenDown: 'Game scheduling and official assignments may be delayed. If the login flow is down, the AD can\'t get in even if the app is healthy. If the application is down, login succeeds but the schedule won\'t load. Affects athletic department only — classroom teaching is unaffected.'
+  },
+
+  // Hudl — sports video and analytics. Runs on Atlassian Statuspage, so we
+  // read its status.json/summary.json directly in-browser (same as Finalsite).
+  // ~23 components; used across the athletic department for film and coaching.
+  {
+    id: 'hudl',
+    task: 'operations',
+    category: 'athletics',
+    name: 'Hudl',
+    sub: 'Team video & analytics',
+    tier: 'secondary',
+    audience: ['operations'],
+    type: 'statuspage',
+    apiUrl: 'https://status.hudl.com/api/v2/status.json',
+    summaryUrl: 'https://status.hudl.com/api/v2/summary.json',
+    pageUrl: 'https://status.hudl.com/',
+    whatItDoes: 'Game and practice video, highlights, and analytics used by coaches and athletes across the athletic department.',
+    whenDown: 'Uploading, viewing, and sharing film may fail; live capture and highlight generation can be interrupted. Affects athletics only — classroom teaching is unaffected.'
+  },
+  // MaxPreps — public high-school scores and stats (CBS Sports). No public
+  // status page, so fetch-athletics-probes.yml runs a synthetic HTTP check
+  // on the site every 5 minutes and writes maxpreps.json.
+  {
+    id: 'maxpreps',
+    task: 'operations',
+    category: 'athletics',
+    name: 'MaxPreps',
+    sub: 'HS scores & stats — synthetic reachability check',
+    tier: 'secondary',
+    audience: ['operations'],
+    type: 'syntheticprobe',
+    apiUrl: 'maxpreps.json',
+    pageUrl: 'https://www.maxpreps.com/',
+    whatItDoes: 'Public high-school sports scores, schedules, and stats. Free; used to post and follow RJ results.',
+    whenDown: 'Scores, schedules, and stats pages may be slow or unreachable. Affects athletics visibility only — no classroom or internal-system impact.'
+  },
+  // Neptune GameTime — game-day music/PA. The player is a LOCAL desktop app,
+  // so this synthetic check on neptunenow.com covers the licensing /
+  // content-update / Voyager-portal path, NOT the machine in the gym.
+  {
+    id: 'neptune',
+    task: 'operations',
+    category: 'athletics',
+    name: 'Neptune GameTime',
+    sub: 'Game-day music — synthetic reachability check',
+    tier: 'secondary',
+    audience: ['operations'],
+    type: 'syntheticprobe',
+    apiUrl: 'neptune.json',
+    pageUrl: 'https://neptunenow.com/',
+    whatItDoes: 'Custom game-day music and PA for athletic events, managed through the Neptune "Voyager" portal. The media player runs locally; this check covers the Neptune web and licensing side.',
+    whenDown: 'The local player keeps running on cached content, but portal access, content updates, and the license refresh (required every 72 hours) may fail. Affects game-day music only.'
+  },
+  // ATGenius — athletic-training injury EMR. Small vendor, no status page,
+  // so fetch-athletics-probes.yml runs a synthetic HTTP check on atgenius.com.
+  {
+    id: 'atgenius',
+    task: 'operations',
+    category: 'athletics',
+    name: 'ATGenius',
+    sub: 'Athletic-training EMR — synthetic reachability check',
+    tier: 'secondary',
+    audience: ['operations'],
+    type: 'syntheticprobe',
+    apiUrl: 'atgenius.json',
+    pageUrl: 'https://atgenius.com/',
+    whatItDoes: 'Web-based injury documentation (SOAP notes, concussion and return-to-play, treatment sign-in) used by the athletic trainers.',
+    whenDown: 'Trainers may be unable to log evaluations, treatments, or concussion and RTP steps until service is restored. Records already saved remain intact. Affects the training room only.'
   },
 
   // RJ Website — synthetic check on the public regisjesuit.com URL.
@@ -1448,7 +1485,7 @@ const VENDORS = [
 // dependencies they can't back up lose trust fast. NoRedInk's own status
 // page explicitly lists AWS and Cloudflare as external services. Canvas
 // (Instructure) has historically run on AWS with Cloudflare fronting much
-// of its traffic; Quizizz's infrastructure is also AWS-hosted. Blackbaud's
+// of its traffic; Blackbaud's
 // own K-12 hosting whitepaper confirms the K-12 product line runs on AWS
 // us-east-1 (3+ availability zones) with Route 53 for DNS — no Cloudflare
 // is documented in the path.
@@ -1458,7 +1495,6 @@ const VENDORS = [
 const INFRA_DEPENDENCIES = {
   instructure: ['aws', 'cloudflare'],
   noredink: ['aws', 'cloudflare'],
-  quizizz: ['aws', 'cloudflare'],
   blackbaud: ['aws'],
 };
 
@@ -1476,7 +1512,7 @@ let lastResults = null;
 // CLOUDFLARE INCIDENT FILTERING
 //=============================================================================
 // RJ doesn't use Cloudflare directly — we feel CF outages only when they hit
-// products that vendor sites we DO use (Canvas, NoRedInk, Quizizz) depend on.
+// products that vendor sites we DO use (Canvas, NoRedInk) depend on.
 // Cloudflare's status page reports issues across hundreds of products and
 // regions globally. Most are noise from RJ's perspective.
 //
@@ -1979,68 +2015,6 @@ async function fetchIXL(vendor) {
   };
 }
 
-// Quizizz / Wayground reachability snapshot:
-//   Written by .github/workflows/fetch-quizizz.yml every 5 minutes. Same-origin
-//   fetch, so no CORS issues. The workflow no longer scrapes a status page (the old
-//   Freshping page is gone) — it probes wayground.com/join and records one of:
-//     'operational' | 'degraded' | 'major'   (+ optional 'detail' like "HTTP 200")
-//   A stale-probe-URL 4xx is recorded as data.parseError and rendered as breakage.
-async function fetchQuizizz(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-
-  // Probe-target problem (e.g., wayground.com/join started returning 404):
-  // surface as breakage so it reads as OUR probe to fix, not a Wayground outage.
-  if (data.parseError) {
-    return buildBreakageResult({
-      vendorPageLabel: 'wayground.com/join',
-      lastKnownSeverity: data.severity,
-      lastSuccessfulParse: data.lastSuccessfulParse,
-      firstFailedAt: data.parseError.firstFailedAt,
-      errorMessage: data.parseError.message,
-      updatedAt: data.fetchedAt
-    });
-  }
-
-  const severity = data.severity || 'operational';
-  const detail = data.detail || '';
-
-  let statusText;
-  let incident = null;
-
-  switch (severity) {
-    case 'operational':
-      statusText = 'Reachable — join page responding';
-      break;
-    case 'degraded':
-      statusText = 'Reachable but throttled';
-      incident = {
-        name: 'Wayground is rate-limiting requests',
-        status: detail || 'Students may see slow or failed loads',
-        updatedAt: null
-      };
-      break;
-    case 'major':
-      statusText = 'Not responding — likely down';
-      incident = {
-        name: 'Wayground join page is unreachable',
-        status: detail ? ('Probe result: ' + detail) : 'See wayground.com/join',
-        updatedAt: null
-      };
-      break;
-    default:
-      statusText = 'Status unknown — try wayground.com/join';
-  }
-
-  return {
-    severity,
-    statusText,
-    incident,
-    updatedAt: data.fetchedAt || new Date().toISOString()
-  };
-}
-
 // Gimkit snapshot file:
 //   Written by the .github/workflows/fetch-gimkit.yml workflow every 5 minutes.
 //   Same-origin fetch, so no CORS issues.
@@ -2389,6 +2363,52 @@ async function fetchRJWebsite(vendor) {
     statusText = statusDetail ? statusLabel + ' — ' + statusDetail : statusLabel;
     incident = {
       name: 'Synthetic check failed for regisjesuit.com',
+      status: statusDetail || statusLabel,
+      updatedAt: null
+    };
+  }
+
+  return {
+    severity,
+    statusText,
+    incident,
+    updatedAt: data.fetchedAt || new Date().toISOString()
+  };
+}
+
+// Generic synthetic-probe snapshot (type 'syntheticprobe'):
+//   For athletics tools with no public status page (MaxPreps, Neptune,
+//   ATGenius). Each JSON is written by fetch-athletics-probes.yml every
+//   5 minutes from a server-side HTTP check. Schema mirrors the RJ Website
+//   probe: severity + statusLabel/statusDetail, with parseError when the
+//   probe itself is broken (e.g., the target URL moved). Same-origin fetch.
+async function fetchSyntheticProbe(vendor) {
+  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+
+  if (data.parseError) {
+    return buildBreakageResult({
+      vendorPageLabel: vendor.probeLabel || vendor.name,
+      lastKnownSeverity: data.severity,
+      lastSuccessfulParse: data.lastSuccessfulParse,
+      firstFailedAt: data.parseError.firstFailedAt,
+      errorMessage: data.parseError.message,
+      updatedAt: data.fetchedAt
+    });
+  }
+
+  const severity = data.severity || 'operational';
+  const statusLabel = data.statusLabel || 'Unknown';
+  const statusDetail = data.statusDetail || null;
+
+  let statusText = statusLabel;
+  let incident = null;
+
+  if (severity !== 'operational') {
+    statusText = statusDetail ? statusLabel + ' — ' + statusDetail : statusLabel;
+    incident = {
+      name: 'Synthetic check failed for ' + vendor.name,
       status: statusDetail || statusLabel,
       updatedAt: null
     };
@@ -3158,8 +3178,8 @@ function renderAll(results) {
 // Add a small line to an infra tile listing which monitored tools depend on
 // this infra provider, and whether any of those dependents are currently red.
 // This is the visual counterpart to the correlation banner tail clause —
-// teachers/IT looking at the Cloudflare tile can see "Canvas, NoRedInk,
-// Quizizz depend on this; Canvas is also red right now."
+// teachers/IT looking at the Cloudflare tile can see "Canvas, NoRedInk
+// depend on this; Canvas is also red right now."
 function decorateInfraTile(tileElement, infraVendor, results, correlations) {
   // Which service vendors list this infra as a dependency?
   const dependentIds = Object.entries(INFRA_DEPENDENCIES)
@@ -3214,12 +3234,12 @@ async function fetchVendor(vendor) {
     case 'instatus':         return fetchInstatus(vendor);
     case 'elsnapshot':       return fetchExploreLearning(vendor);
     case 'ixlsnapshot':      return fetchIXL(vendor);
-    case 'quizizzsnapshot':  return fetchQuizizz(vendor);
     case 'gimkitsnapshot':   return fetchGimkit(vendor);
     case 'soundtrapsnapshot': return fetchSoundtrap(vendor);
     case 'noredinksnapshot': return fetchNoRedInk(vendor);
     case 'arbitersnapshot':  return fetchArbiterSports(vendor);
     case 'rjwebsitesnapshot': return fetchRJWebsite(vendor);
+    case 'syntheticprobe':   return fetchSyntheticProbe(vendor);
     case 'myrjsnapshot':     return fetchMyRJ(vendor);
     case 'awssnapshot':      return fetchAWS(vendor);
     default: throw new Error('Unknown vendor type: ' + vendor.type);

@@ -1,0 +1,8 @@
+{
+  "fetchedAt": "2026-07-02T00:00:00Z",
+  "severity": "operational",
+  "statusLabel": "Reachable",
+  "statusDetail": "HTTP 200",
+  "parseError": null,
+  "lastSuccessfulParse": "2026-07-02T00:00:00Z"
+}
