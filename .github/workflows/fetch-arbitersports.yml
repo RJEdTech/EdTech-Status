@@ -17,55 +17,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Synthetic checks on ArbiterSports login + application
+      - name: Synthetic reachability checks on ArbiterSports
         run: |
           node <<'EOF'
           const https = require('https');
           const fs = require('fs');
           const { URL } = require('url');
 
-          // ArbiterSports publishes no usable status page — Pingdom's /checks
-          // endpoint blocks unauthenticated access, and Downdetector 403s GitHub
-          // runner IPs (that was the old, broken approach). Instead we run two
-          // synthetic HTTP checks that together model the AD's real workflow —
-          // "can I sign in AND reach the schedule?" — and both must be healthy:
-          //   1. Login flow:  go.arbitersports.com        (Microsoft B2C tenant)
-          //   2. Application: www1.arbitersports.com/ArbiterGame/Schedule
+          // ArbiterSports publishes no usable status page (Pingdom /checks blocks
+          // unauthenticated access; Downdetector 403s GitHub runner IPs — that was
+          // the old, broken scraper). Instead we run reachability probes on the two
+          // hostnames the AD's workflow depends on:
+          //   1. Login front door: go.arbitersports.com
+          //   2. Application:      www1.arbitersports.com/ArbiterGame/Schedule
           //
-          // The tile rolls up worst-of; per-check status surfaces in the expand
-          // (index.html reads the `services` array below).
+          // IMPORTANT — why we do NOT follow redirects and why 403 counts as "up":
+          // go.arbitersports.com 302-redirects to an Azure AD B2C sign-in
+          // (arbitersportsb2c.onmicrosoft.com). That B2C endpoint loads fine in a
+          // real browser but WAF-403s datacenter IPs like GitHub's runners. If we
+          // followed the redirect we'd record that bot-block 403 as a false outage.
+          // So we read only the FIRST response's status line and treat ANY reply
+          // the origin gives — 2xx, 3xx (redirect to login), or 401/403 (auth
+          // challenge) — as proof the service is alive. Only a real server error
+          // (5xx) or a network failure/timeout is an outage.
           //
-          // Severity ceiling is 'partial' (orange) for ANY check failure. When
+          // A bare GET can't verify post-login application health — only that each
+          // layer is reachable. Severity ceiling is 'partial' (orange): when
           // ArbiterSports is down the AD's workaround is manual scheduling —
-          // friction, not a full stoppage — so we don't ring the 'major' alarm.
-          //
-          // Limitation (same as the rest of the dashboard): this runs from
-          // GitHub's runners, so it catches vendor-side outages, not an
-          // RJ-network or Securly issue. And unauthenticated GETs can't verify
-          // post-login application health — only that each layer is reachable.
+          // friction, not a full stoppage. Tile rolls up worst-of; per-check
+          // status surfaces in the expand (index.html reads the `services` array).
           const TARGETS = [
-            { name: 'Login flow',  url: 'https://go.arbitersports.com/' },
-            { name: 'Application', url: 'https://www1.arbitersports.com/ArbiterGame/Schedule' },
+            { name: 'Login front door', url: 'https://go.arbitersports.com/' },
+            { name: 'Application',       url: 'https://www1.arbitersports.com/ArbiterGame/Schedule' },
           ];
-          const OUT_PATH      = 'arbitersports.json';
-          const ATTEMPTS      = 3;      // best-of, to dampen single-request runner blips
-          const TIMEOUT_MS    = 15000;  // per attempt
-          const MAX_REDIRECTS = 5;
-          // Browser-like UA on purpose: a bot-ish UA risks a CDN 403 that would
-          // look like an outage when it isn't.
+          const OUT_PATH   = 'arbitersports.json';
+          const ATTEMPTS   = 3;      // best-of, to dampen single-request runner blips
+          const TIMEOUT_MS = 15000;  // per attempt
           const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
                      '(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
-          // One HTTP probe following redirects. Resolves { ok, status } on any
-          // HTTP response, or { ok:false, status:0, error } on network failure /
-          // timeout. We only need the status line, so we tear the socket down
-          // immediately rather than downloading the body.
-          function probeOnce(targetUrl, redirectsLeft) {
+          // Single GET, no redirect following. Read only the status line; we tear
+          // the socket down immediately rather than downloading the body.
+          function probeOnce(targetUrl) {
             return new Promise((resolve) => {
               let parsed;
               try { parsed = new URL(targetUrl); }
-              catch (e) { resolve({ ok: false, status: 0, error: 'Invalid URL: ' + e.message }); return; }
-
+              catch (e) { resolve({ status: 0, error: 'Invalid URL: ' + e.message }); return; }
               const req = https.get(parsed, {
                 headers: {
                   'User-Agent': UA,
@@ -73,43 +70,30 @@ jobs:
                   'Accept-Language': 'en-US,en;q=0.9'
                 },
                 timeout: TIMEOUT_MS
-              }, (res) => {
-                const status = res.statusCode;
-                if (status >= 300 && status < 400 && res.headers.location && redirectsLeft > 0) {
-                  res.destroy();
-                  let next;
-                  try { next = new URL(res.headers.location, targetUrl).toString(); }
-                  catch (e) { resolve({ ok: true, status }); return; } // malformed redirect; report 3xx as-is
-                  resolve(probeOnce(next, redirectsLeft - 1));
-                  return;
-                }
-                res.destroy();
-                resolve({ ok: status >= 200 && status < 400, status });
-              });
-              req.on('error', (err) => resolve({ ok: false, status: 0, error: err.message }));
+              }, (res) => { const status = res.statusCode; res.destroy(); resolve({ status }); });
+              req.on('error', (err) => resolve({ status: 0, error: err.message }));
               req.on('timeout', () => req.destroy(new Error('timeout after ' + TIMEOUT_MS + 'ms')));
             });
           }
 
-          // Classify one completed probe into { severity, label, detail }.
-          // Ceiling is 'partial' — no path returns 'major'.
-          function classify(result) {
-            if (result.error)        return { severity: 'partial',     label: 'Unreachable',        detail: result.error };
-            const s = result.status;
-            if (s >= 200 && s < 400) return { severity: 'operational', label: 'Operating normally', detail: null };
-            if (s >= 500)            return { severity: 'partial',     label: 'Server error',       detail: 'HTTP ' + s };
-            return { severity: 'partial', label: 'Unexpected response', detail: 'HTTP ' + s }; // 4xx after redirects
+          // Auth-aware classification. ANY HTTP response proves the origin is alive
+          // — including 3xx (redirect to login) and 401/403 (auth challenge), the
+          // EXPECTED reply to an unauthenticated bot. Only 5xx or a network failure
+          // is an outage. Ceiling: 'partial' (no path returns 'major').
+          function classify(r) {
+            if (r.error)  return { severity: 'partial',     label: 'Unreachable',  detail: r.error };
+            const s = r.status;
+            if (s >= 500) return { severity: 'partial',     label: 'Server error', detail: 'HTTP ' + s };
+            if (s === 0)  return { severity: 'partial',     label: 'Unreachable',  detail: 'no response' };
+            return { severity: 'operational', label: 'Reachable', detail: 'HTTP ' + s };
           }
 
-          // Best-of ranking (lower = healthier). ANY reachable reading beats a failure.
           const RANK = { operational: 0, degraded: 1, partial: 2 };
           function rank(o) { return RANK[o.severity] != null ? RANK[o.severity] : 2; }
 
           async function probeTarget(t) {
             const outcomes = [];
-            for (let i = 0; i < ATTEMPTS; i++) {
-              outcomes.push(classify(await probeOnce(t.url, MAX_REDIRECTS)));
-            }
+            for (let i = 0; i < ATTEMPTS; i++) outcomes.push(classify(await probeOnce(t.url)));
             outcomes.sort((a, b) => rank(a) - rank(b));
             const best = outcomes[0];
             return { name: t.name, severity: best.severity, label: best.label, detail: best.detail };
@@ -137,7 +121,7 @@ jobs:
 
           (async () => {
             const existing = readExisting();
-            const SOURCE = 'synthetic-check (go.arbitersports.com + www1.arbitersports.com)';
+            const SOURCE = 'synthetic-reachability (go.arbitersports.com + www1.arbitersports.com)';
             try {
               const services = [];
               for (const t of TARGETS) services.push(await probeTarget(t));
@@ -145,7 +129,7 @@ jobs:
               const now = new Date().toISOString();
 
               console.log('--- ArbiterSports checks:');
-              for (const s of services) console.log('    ' + s.name + ': ' + s.severity + ' (' + s.label + (s.detail ? ' — ' + s.detail : '') + ')');
+              for (const s of services) console.log('    ' + s.name + ': ' + s.severity + ' (' + s.label + ' — ' + s.detail + ')');
               console.log('--- Rollup severity:', severity);
 
               const newContent = {
