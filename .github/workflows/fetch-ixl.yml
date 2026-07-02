@@ -21,113 +21,23 @@ jobs:
         run: |
           node <<'EOF'
           const https = require('https');
-          const zlib = require('zlib');
           const fs = require('fs');
 
           const PAGE_URL = 'https://status.ixl.com/';
           const OUT_PATH = 'ixl.json';
 
-          // Use a realistic browser User-Agent and full request headers.
-          // status.ixl.com sits behind Cloudflare; a non-browser UA gets flagged
-          // by bot management and may receive a stripped-down or challenge page.
-          // The combination below mimics a real Chrome request closely enough to
-          // pass routine bot scoring.
-          //
-          // We accept gzip/deflate/br because Cloudflare doesn't reliably honor
-          // 'Accept-Encoding: identity' — it sometimes returns compressed bodies
-          // anyway, which previously caused parse failures (the body looked like
-          // binary noise and didn't match our markers). zlib decompresses below.
-          const REQUEST_HEADERS = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Cache-Control': 'no-cache'
-          };
-
-          // Sanity floor for response size. The IXL page has only one component
-          // and zero incidents, so the props blob is small — minimal valid
-          // responses can be ~4 KB. We keep a low floor only to reject obvious
-          // garbage (truncated streams, empty responses). The real integrity
-          // check is the marker regex in fetchWithRetry.
-          const MIN_RESPONSE_BYTES = 1500;
-
-          // Per-request timeout. If the connection stalls, we'd rather fail
-          // fast and let the retry loop try again than hang the whole job.
-          const REQUEST_TIMEOUT_MS = 15000;
-
           function fetchUrl(url) {
             return new Promise((resolve, reject) => {
-              const req = https.get(url, { headers: REQUEST_HEADERS, timeout: REQUEST_TIMEOUT_MS }, (res) => {
+              https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
                 if (res.statusCode !== 200) {
                   reject(new Error('HTTP ' + res.statusCode));
                   return;
                 }
-
-                // Decompress based on Content-Encoding. Log the encoding and
-                // declared length so future failures are debuggable from the
-                // run output alone.
-                const encoding = (res.headers['content-encoding'] || '').toLowerCase();
-                const declaredLength = res.headers['content-length'] || '(none)';
-                console.log('Content-Encoding:', encoding || '(none)', '| Content-Length:', declaredLength);
-
-                let stream = res;
-                if (encoding === 'gzip') {
-                  stream = res.pipe(zlib.createGunzip());
-                } else if (encoding === 'deflate') {
-                  stream = res.pipe(zlib.createInflate());
-                } else if (encoding === 'br') {
-                  stream = res.pipe(zlib.createBrotliDecompress());
-                }
-
                 let body = '';
-                stream.setEncoding('utf8');
-                stream.on('data', (chunk) => body += chunk);
-                stream.on('end', () => {
-                  if (body.length < MIN_RESPONSE_BYTES) {
-                    reject(new Error('Response too short: ' + body.length + ' bytes (encoding=' + (encoding || 'none') + ')'));
-                    return;
-                  }
-                  resolve(body);
-                });
-                stream.on('error', reject);
-                res.on('error', reject);
-              });
-              req.on('timeout', () => {
-                req.destroy(new Error('Request timeout after ' + REQUEST_TIMEOUT_MS + 'ms'));
-              });
-              req.on('error', reject);
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
             });
-          }
-
-          // Uptime.com occasionally returns a page where the inline status JS
-          // blob hasn't rendered (edge cache, anti-bot challenge, etc.). Rather
-          // than declaring breakage on the first miss, retry up to 3 times with
-          // a short backoff before giving up. Most flakes resolve on attempt 2.
-          async function fetchWithRetry(url, attempts) {
-            attempts = attempts || 3;
-            let lastErr;
-            for (let i = 1; i <= attempts; i++) {
-              try {
-                const html = await fetchUrl(url);
-                if (!/global_is_operational|StatusPageDisplayController/i.test(html)) {
-                  // Log diagnostic context so future failures are debuggable
-                  // without having to add logging after the fact.
-                  console.log('Marker miss. HTML length: ' + html.length);
-                  console.log('First 500 chars: ' + html.substring(0, 500));
-                  console.log('Last 500 chars: ' + html.substring(Math.max(0, html.length - 500)));
-                  throw new Error('Page does not contain expected Uptime.com markers');
-                }
-                return html;
-              } catch (e) {
-                lastErr = e;
-                if (i < attempts) {
-                  console.log('Attempt ' + i + ' failed: ' + e.message + ' — retrying');
-                  await new Promise(function (r) { setTimeout(r, 2000 * i); });
-                }
-              }
-            }
-            throw new Error('Failed after ' + attempts + ' attempts: ' + lastErr.message);
           }
 
           // Detection logic: status.ixl.com is hosted on Uptime.com, which renders
@@ -220,9 +130,7 @@ jobs:
             const existing = readExisting();
 
             try {
-              const html = await fetchWithRetry(PAGE_URL);
-              console.log('HTML length:', html.length);
-              console.log('Contains global_is_operational:', html.includes('global_is_operational'));
+              const html = await fetchUrl(PAGE_URL);
               const parsed = parseStatus(html);
 
               const now = new Date().toISOString();
@@ -296,20 +204,10 @@ jobs:
           git add ixl.json
           if git diff --staged --quiet; then
             echo "No changes to commit."
-            exit 0
+          else
+            git commit -m "Update IXL status snapshot [skip ci]"
+            git push
           fi
-          git commit -m "Update IXL status snapshot [skip ci]"
-          for i in 1 2 3 4 5; do
-            if git push; then
-              echo "Pushed on attempt $i"
-              exit 0
-            fi
-            echo "Push failed (attempt $i) — pulling and retrying"
-            git pull --rebase origin main
-            sleep $((RANDOM % 5 + 1))
-          done
-          echo "::error::Failed to push after 5 attempts"
-          exit 1
 
       - name: Fail run if scraper is broken
         # This step exists so the GitHub Actions run shows red whenever the

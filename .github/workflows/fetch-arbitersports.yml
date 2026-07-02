@@ -17,255 +17,128 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run dual synthetic check (login flow + application)
+      - name: Fetch and parse ArbiterSports Downdetector page
         run: |
           node <<'EOF'
           const https = require('https');
           const fs = require('fs');
-          const { URL } = require('url');
 
-          // ArbiterSports doesn't publish a usable status page (Pingdom's /checks
-          // endpoint blocks unauthenticated access; Downdetector blocks GitHub
-          // runner IPs with HTTP 403). Instead, we run synthetic checks against
-          // the two URLs that matter for the athletic department's actual
-          // workflow:
+          // ArbiterSports doesn't publish its own status page, so we scrape
+          // Downdetector. Important caveat: this is a CROWDSOURCED signal —
+          // it tells us "users are complaining," not "the vendor is reporting
+          // an issue." Expect a higher false-positive rate than other tiles
+          // on the dashboard.
           //
-          //   1. Login flow:  https://go.arbitersports.com/
-          //      Microsoft Entra External ID (B2C) sign-in page. Confirms the
-          //      tenant can broker authentication. We verify the response
-          //      contains "arbitersportsb2c.onmicrosoft.com" — the B2C tenant
-          //      identifier, which is stable and won't change with redesigns.
+          // Downdetector renders the page server-side as Next.js with the
+          // status data embedded in three independent places we can parse:
           //
-          //   2. Application: https://www1.arbitersports.com/ArbiterGame/Schedule
-          //      The actual ArbiterGame app. Anonymous visitors get redirected
-          //      to the login flow (302 -> go.arbitersports.com). We follow
-          //      redirects and verify any non-5xx final response. The redirect
-          //      itself is healthy behavior — we just want to confirm the
-          //      app server is alive and routing correctly.
+          //   1. window.PogoConfig (preferred — clean boolean):
+          //      window.PogoConfig = {"template":"status",...,"outage":false};
           //
-          // What this catches:
-          //   - DNS / CDN failures on either domain
-          //   - SSL / TLS expiry
-          //   - 5xx errors from either tier
-          //   - Microsoft B2C tenant misconfiguration (login page wouldn't
-          //     contain the expected tenant string)
+          //   2. JSON-LD organization schema (fallback):
+          //      "companyCurrentStatus":"success"   // success | warning | danger
           //
-          // What this misses:
-          //   - Per-feature bugs inside the app post-login
-          //   - ArbiterPay (out of scope per RJ usage)
-          //   - Specific service breakdowns (the Pingdom page would have shown
-          //     ArbiterLive/ArbiterSports/Login Services/Student Registration
-          //     separately, but that endpoint is unauthenticated-blocked)
+          //   3. Page heading text (last resort):
+          //      "User reports show no current problems with ArbiterSports"
           //
-          // Severity ceiling: 'partial' (orange) for any failure. Athletics
-          // outages matter — Saturday games are real — but they're not
-          // school-day-blocking the way Canvas/Blackbaud outages are. Reserving
-          // 'major' (red) for those keeps the dashboard's color language clear.
-          // Per-check status is broken out into the tile's expand section so
-          // the AD can see which layer (login or app) is affected.
-
-          const LOGIN_URL = 'https://go.arbitersports.com/';
-          const APP_URL = 'https://www1.arbitersports.com/ArbiterGame/Schedule';
-          const LOGIN_VERIFY_STRING = 'arbitersportsb2c.onmicrosoft.com';
+          // We try them in order. PogoConfig is at the top of the HTML and
+          // is the cleanest, but it's a binary outage flag — to distinguish
+          // success/warning/danger we need companyCurrentStatus too.
+          //
+          // Severity mapping (per dashboard conventions):
+          //   success  -> operational     (green)
+          //   warning  -> degraded        (yellow — "possible problems")
+          //   danger   -> partial         (orange — confirmed by report volume)
+          //
+          // We don't map danger to 'major' (red) because this is crowdsourced
+          // data, not an authoritative vendor signal. Orange says "something's
+          // up, click through" without ringing the same alarm as a vendor
+          // explicitly reporting a major outage.
+          const PAGE_URL = 'https://downdetector.com/status/arbitersports/';
           const OUT_PATH = 'arbitersports.json';
-          const TIMEOUT_MS = 15000;
-          const MAX_REDIRECTS = 5;
-          const USER_AGENT = 'rjedtech-status-dashboard (https://rjedtech.github.io/EdTech-Status/)';
 
-          // Severity ranking for "worst of" comparisons. Higher = worse.
-          const SEVERITY_RANK = {
-            operational: 0,
-            unknown:     1,
-            degraded:    2,
-            partial:     3
-          };
-
-          // GET a URL, optionally following redirects. Returns:
-          //   { ok, status, body, error, redirectChain }
-          // - ok = true if final response was 2xx or 3xx (including expected redirects)
-          // - status = final HTTP status code (after redirects)
-          // - body = response body as string (may be truncated)
-          // - error = error message if request failed entirely
-          // - redirectChain = list of URLs visited (useful for debug logs)
-          function fetchUrl(targetUrl, { followRedirects = false, redirectsRemaining = MAX_REDIRECTS, redirectChain = [] } = {}) {
-            return new Promise((resolve) => {
-              redirectChain = [...redirectChain, targetUrl];
-
-              let parsedUrl;
-              try {
-                parsedUrl = new URL(targetUrl);
-              } catch (err) {
-                resolve({ ok: false, status: 0, body: '', error: 'Invalid URL: ' + err.message, redirectChain });
-                return;
-              }
-
+          function fetchUrl(url) {
+            return new Promise((resolve, reject) => {
+              // Downdetector serves a normal HTML page; we need a realistic
+              // User-Agent because some CDN configs reject bare scraper UAs.
+              // We use a generic descriptor that identifies us honestly.
               const opts = {
-                method: 'GET',
                 headers: {
-                  'User-Agent': USER_AGENT,
-                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                  'User-Agent': 'rjedtech-status-dashboard',
+                  'Accept': 'text/html,application/xhtml+xml',
                   'Accept-Language': 'en-US,en;q=0.9'
-                },
-                timeout: TIMEOUT_MS
+                }
               };
-
-              const req = https.get(parsedUrl, opts, (res) => {
-                // Handle redirects
-                if (followRedirects && [301, 302, 303, 307, 308].includes(res.statusCode)) {
-                  if (redirectsRemaining <= 0) {
-                    resolve({
-                      ok: false,
-                      status: res.statusCode,
-                      body: '',
-                      error: 'Exceeded maximum redirects (' + MAX_REDIRECTS + ')',
-                      redirectChain
-                    });
-                    return;
-                  }
-                  const location = res.headers.location;
-                  if (!location) {
-                    resolve({
-                      ok: false,
-                      status: res.statusCode,
-                      body: '',
-                      error: 'Redirect with no Location header',
-                      redirectChain
-                    });
-                    return;
-                  }
-                  // Resolve relative redirects against the current URL
-                  const nextUrl = new URL(location, targetUrl).toString();
-                  res.resume(); // discard body before recursing
-                  resolve(fetchUrl(nextUrl, {
-                    followRedirects: true,
-                    redirectsRemaining: redirectsRemaining - 1,
-                    redirectChain
-                  }));
+              https.get(url, opts, (res) => {
+                if (res.statusCode !== 200) {
+                  reject(new Error('HTTP ' + res.statusCode));
                   return;
                 }
-
                 let body = '';
-                let bytesRead = 0;
-                const MAX_BODY = 200000; // 200KB cap — enough to find verify strings
-                res.on('data', (chunk) => {
-                  bytesRead += chunk.length;
-                  if (body.length < MAX_BODY) {
-                    body += chunk.toString('utf8');
-                    if (body.length > MAX_BODY) body = body.slice(0, MAX_BODY);
-                  }
-                });
-                res.on('end', () => {
-                  resolve({
-                    ok: res.statusCode >= 200 && res.statusCode < 400,
-                    status: res.statusCode,
-                    body,
-                    error: null,
-                    redirectChain
-                  });
-                });
-              });
-
-              req.on('error', (err) => {
-                resolve({ ok: false, status: 0, body: '', error: err.message, redirectChain });
-              });
-
-              req.on('timeout', () => {
-                req.destroy(new Error('Request timed out after ' + TIMEOUT_MS + 'ms'));
-              });
+                res.on('data', (chunk) => body += chunk);
+                res.on('end', () => resolve(body));
+              }).on('error', reject);
             });
           }
 
-          // Run the login flow check.
-          // Healthy = 200 with the B2C tenant string in the body.
-          async function checkLogin() {
-            console.log('--- Checking login flow at', LOGIN_URL);
-            const res = await fetchUrl(LOGIN_URL, { followRedirects: true });
-            console.log('  Status:', res.status, 'Redirects:', res.redirectChain.join(' -> '));
+          // Try multiple parsing strategies in order of reliability.
+          // Returns { severity, source } where source identifies which strategy
+          // matched, useful for debugging if one path stops working.
+          function parseStatus(html) {
+            // Confirm we're on the right page first — Downdetector serves
+            // generic landing pages or 404s for unknown services.
+            if (!/arbitersports/i.test(html)) {
+              throw new Error('Page does not mention ArbiterSports — Downdetector may have moved or removed the listing.');
+            }
 
-            if (res.error) {
-              return {
-                name: 'Login flow',
-                severity: 'partial',
-                label: 'Unreachable',
-                detail: res.error
-              };
+            // Strategy 1: companyCurrentStatus from JSON-LD / Next.js data.
+            // This gives us the three-state value we want directly.
+            const statusMatch = html.match(/"companyCurrentStatus"\s*:\s*"([^"]+)"/);
+            if (statusMatch) {
+              const raw = statusMatch[1].toLowerCase();
+              let severity;
+              switch (raw) {
+                case 'success':  severity = 'operational'; break;
+                case 'warning':  severity = 'degraded';    break;
+                case 'danger':   severity = 'partial';     break;
+                default:
+                  // Unknown value — Downdetector may have introduced a new state.
+                  // Surface as breakage (handled by outer catch) rather than
+                  // guessing, so the JSON's parseError flags it for review.
+                  throw new Error('Unknown companyCurrentStatus value: ' + raw);
+              }
+              return { severity, source: 'companyCurrentStatus', rawValue: raw };
             }
-            if (res.status >= 500) {
-              return {
-                name: 'Login flow',
-                severity: 'partial',
-                label: 'Server error',
-                detail: 'HTTP ' + res.status
-              };
-            }
-            if (res.status >= 400) {
-              return {
-                name: 'Login flow',
-                severity: 'partial',
-                label: 'Login page broken',
-                detail: 'HTTP ' + res.status
-              };
-            }
-            if (!res.body.includes(LOGIN_VERIFY_STRING)) {
-              return {
-                name: 'Login flow',
-                severity: 'degraded',
-                label: 'Unexpected page content',
-                detail: 'Expected B2C tenant identifier missing from response — login page may be misconfigured or replaced.'
-              };
-            }
-            return {
-              name: 'Login flow',
-              severity: 'operational',
-              label: 'Operating normally',
-              detail: null
-            };
-          }
 
-          // Run the application check.
-          // Healthy = any non-5xx response after redirect chain. The app
-          // server is expected to redirect anonymous visitors to login —
-          // that redirect itself is the sign of health.
-          async function checkApp() {
-            console.log('--- Checking application at', APP_URL);
-            const res = await fetchUrl(APP_URL, { followRedirects: true });
-            console.log('  Status:', res.status, 'Redirects:', res.redirectChain.join(' -> '));
+            // Strategy 2: PogoConfig outage boolean. Less granular (no
+            // warning/degraded distinction) but still useful as a fallback.
+            const pogoMatch = html.match(/window\.PogoConfig\s*=\s*\{[^}]*"outage"\s*:\s*(true|false)/);
+            if (pogoMatch) {
+              const isOutage = pogoMatch[1] === 'true';
+              return {
+                severity: isOutage ? 'partial' : 'operational',
+                source: 'PogoConfig',
+                rawValue: pogoMatch[1]
+              };
+            }
 
-            if (res.error) {
-              return {
-                name: 'Application',
-                severity: 'partial',
-                label: 'Unreachable',
-                detail: res.error
-              };
+            // Strategy 3: Page heading text. Most fragile — wording could
+            // change at any time — but a final safety net.
+            if (/no current problems with/i.test(html)) {
+              return { severity: 'operational', source: 'heading-text', rawValue: 'no problems' };
             }
-            if (res.status >= 500) {
-              return {
-                name: 'Application',
-                severity: 'partial',
-                label: 'Server error',
-                detail: 'HTTP ' + res.status
-              };
+            if (/possible problems with/i.test(html)) {
+              return { severity: 'degraded', source: 'heading-text', rawValue: 'possible' };
             }
-            // 4xx is unusual on the redirect path but not necessarily fatal —
-            // surface as degraded so we click through and check.
-            if (res.status >= 400) {
-              return {
-                name: 'Application',
-                severity: 'degraded',
-                label: 'Unexpected response',
-                detail: 'HTTP ' + res.status
-              };
+            if (/problems (?:at|with) /i.test(html)) {
+              return { severity: 'partial', source: 'heading-text', rawValue: 'problems' };
             }
-            return {
-              name: 'Application',
-              severity: 'operational',
-              label: 'Operating normally',
-              detail: null
-            };
+
+            throw new Error('Could not find any expected status indicator on the Downdetector page — page structure may have changed.');
           }
 
           (async () => {
+            // Helper: read existing snapshot if present
             function readExisting() {
               if (!fs.existsSync(OUT_PATH)) return null;
               try {
@@ -275,60 +148,52 @@ jobs:
               }
             }
 
-            // Compare meaningful content, ignoring volatile timestamps
+            // Helper: compare two objects' content fields (ignoring volatile timestamps)
             function contentEqual(a, b) {
               if (!a || !b) return false;
-              if (a.severity !== b.severity) return false;
-              if (JSON.stringify(a.services) !== JSON.stringify(b.services)) return false;
-              if (JSON.stringify(a.parseError) !== JSON.stringify(b.parseError)) return false;
-              return true;
+              const fields = ['source', 'severity', 'parseSource', 'rawValue', 'parseError', 'lastSuccessfulParse'];
+              return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
             }
 
             const existing = readExisting();
 
             try {
-              const [loginResult, appResult] = await Promise.all([checkLogin(), checkApp()]);
-              const services = [loginResult, appResult];
-
-              // Roll up to worst-of severity for the tile color
-              const worstSeverity = services.reduce((worst, s) => {
-                const r = SEVERITY_RANK[s.severity] ?? 1;
-                const wr = SEVERITY_RANK[worst] ?? 0;
-                return r > wr ? s.severity : worst;
-              }, 'operational');
-
-              console.log('--- Roll-up severity:', worstSeverity);
+              const html = await fetchUrl(PAGE_URL);
+              const parsed = parseStatus(html);
 
               const now = new Date().toISOString();
               const newContent = {
-                source: 'synthetic-check',
-                severity: worstSeverity,
-                services,
-                parseError: null,
-                lastSuccessfulParse: now
+                source: PAGE_URL,
+                severity: parsed.severity,
+                parseSource: parsed.source,    // which strategy matched (debug)
+                rawValue: parsed.rawValue,     // raw value found (debug)
+                parseError: null,              // explicitly cleared on success
+                lastSuccessfulParse: now       // updated on every successful parse
               };
 
               if (contentEqual(newContent, existing)) {
-                console.log('No content change — skipping write.');
+                console.log('No content change — skipping write. Current severity:', parsed.severity, '(via', parsed.source + ')');
                 return;
               }
 
               const snapshot = { fetchedAt: now, ...newContent };
               fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
-              console.log('Status changed — wrote', OUT_PATH);
+              console.log('Status content changed — wrote', OUT_PATH);
               console.log(JSON.stringify(snapshot, null, 2));
-
             } catch (err) {
-              // Catastrophic failure — neither check completed at all (rare,
-              // would mean the workflow harness itself broke).
-              console.error('Workflow harness failed:', err.message);
+              // Don't lose the last-known status. Preserve everything from the
+              // last good fetch and layer parseError on top so the dashboard
+              // can flag the breakage while still showing the most recent
+              // valid reading.
+              console.error('Failed to fetch/parse Downdetector page:', err.message);
 
               const now = new Date().toISOString();
               const lastGood = existing || {};
               const newContent = {
-                source: 'synthetic-check',
+                source: PAGE_URL,
                 severity: lastGood.severity || 'unknown',
-                services: lastGood.services || null,
+                parseSource: lastGood.parseSource || null,
+                rawValue: lastGood.rawValue || null,
                 parseError: {
                   message: err.message,
                   firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
@@ -336,14 +201,17 @@ jobs:
                 lastSuccessfulParse: lastGood.lastSuccessfulParse || null
               };
 
+              // Only commit if the breakage state itself changed — don't spam
+              // commits every 5 minutes during a sustained scraper outage.
               if (contentEqual(newContent, existing)) {
-                console.log('Workflow still failing with same error — skipping write.');
+                console.log('Parse still failing with same error — skipping write.');
                 return;
               }
 
               const snapshot = { fetchedAt: now, ...newContent };
               fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
               console.log('Wrote breakage snapshot to', OUT_PATH);
+              console.log(JSON.stringify(snapshot, null, 2));
             }
           })();
           EOF
@@ -370,14 +238,15 @@ jobs:
           echo "::error::Failed to push after 5 attempts"
           exit 1
 
-      - name: Fail run if scraper harness is broken
-        # Surface harness breakage (NOT individual check failures) as a red
-        # Actions run. Individual check failures (e.g. login down but app up)
-        # are normal data and write a clean snapshot. Only set the workflow
-        # red when the workflow itself couldn't complete.
+      - name: Fail run if scraper is broken
+        # This step exists so the GitHub Actions run shows red whenever the
+        # scraper can't recognize the page, even though we wrote the breakage
+        # state to JSON in a clean exit (so the commit step could run). The
+        # dashboard surfaces breakage from the JSON; this step exists for
+        # GitHub-side alerting (red X on the Actions tab).
         run: |
           if [ -f arbitersports.json ] && grep -q '"parseError": {' arbitersports.json; then
-            echo "::error::ArbiterSports scraper harness failed. See arbitersports.json for details."
+            echo "::error::ArbiterSports scraper failed to parse the page. See arbitersports.json for details."
             cat arbitersports.json
             exit 1
           fi

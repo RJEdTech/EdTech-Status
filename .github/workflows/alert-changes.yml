@@ -81,18 +81,6 @@ jobs:
               kind: 'snapshot', file: 'soundtrap.json' },
             { id: 'noredink', name: 'NoRedInk', tier: 'secondary',
               kind: 'snapshot', file: 'noredink.json' },
-
-            // Operations vendors (added when audience filter shipped)
-            { id: 'finalsite', name: 'Finalsite', tier: 'secondary',
-              kind: 'statuspage', url: 'https://status.finalsite.com/api/v2/status.json' },
-            { id: 'arbitersports', name: 'ArbiterSports', tier: 'secondary',
-              kind: 'snapshot', file: 'arbitersports.json' },
-
-            // RJ-specific synthetic checks (added when synthetic check tiles shipped)
-            { id: 'rj-website', name: 'RJ Website', tier: 'core',
-              kind: 'snapshot', file: 'rj-website.json' },
-            { id: 'myrj', name: 'MyRJ', tier: 'core',
-              kind: 'snapshot', file: 'myrj.json' },
           ];
 
           // Infra → dependent service map. Used to suppress infra-only alerts
@@ -341,17 +329,7 @@ jobs:
           git add state/last-status.json
           if git diff --staged --quiet; then
             echo "No state changes to commit."
-            exit 0
+          else
+            git commit -m "Update last-status.json [skip ci]"
+            git push
           fi
-          git commit -m "Update last-status.json [skip ci]"
-          for i in 1 2 3 4 5; do
-            if git push; then
-              echo "Pushed on attempt $i"
-              exit 0
-            fi
-            echo "Push failed (attempt $i) — pulling and retrying"
-            git pull --rebase origin main
-            sleep $((RANDOM % 5 + 1))
-          done
-          echo "::error::Failed to push after 5 attempts"
-          exit 1
