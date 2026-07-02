@@ -1,10 +1,8 @@
 {
-  "fetchedAt": "2026-06-29T21:42:41.127Z",
-  "source": "https://statuspage.freshping.io/621-QuizizzStatusPage/",
+  "fetchedAt": "2026-07-02T14:55:03.107Z",
+  "source": "https://wayground.com/join",
   "severity": "operational",
-  "parseError": {
-    "message": "Page loaded but no known status banner found — Freshping may have changed the wording or added a new state.",
-    "firstFailedAt": "2026-06-17T10:00:58.337Z"
-  },
-  "lastSuccessfulParse": "2026-06-17T05:06:27.581Z"
+  "detail": "HTTP 202",
+  "parseError": null,
+  "lastSuccessfulParse": "2026-07-02T14:55:03.107Z"
 }
