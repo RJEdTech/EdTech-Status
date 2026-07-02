@@ -1,12 +1,21 @@
 {
-  "fetchedAt": "2026-07-02T15:33:08.180Z",
-  "source": "https://downdetector.com/status/arbitersports/",
+  "fetchedAt": "2026-07-02T23:01:15.633Z",
+  "source": "synthetic-check (go.arbitersports.com + www1.arbitersports.com)",
   "severity": "operational",
-  "parseSource": null,
-  "rawValue": null,
-  "parseError": {
-    "message": "HTTP 403",
-    "firstFailedAt": "2026-07-02T15:33:08.180Z"
-  },
-  "lastSuccessfulParse": "2026-06-27T12:48:47.272Z"
+  "services": [
+    {
+      "name": "Login flow",
+      "severity": "operational",
+      "label": "Operating normally",
+      "detail": null
+    },
+    {
+      "name": "Application",
+      "severity": "operational",
+      "label": "Operating normally",
+      "detail": null
+    }
+  ],
+  "parseError": null,
+  "lastSuccessfulParse": "2026-07-02T23:01:15.633Z"
 }
