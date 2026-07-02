@@ -885,6 +885,21 @@
 
 <script>
 //=============================================================================
+// DATA SOURCE RESOLVER  (Pages decouple)
+//=============================================================================
+// The site is deployed by a custom GitHub Actions workflow (deploy-pages.yml)
+// that fires ONLY on real content changes and ignores '**/*.json'. That means
+// the deployed copy of the snapshot JSONs is frozen at deploy time. To keep the
+// 5-minute scraper data live WITHOUT redeploying, we read every relative data
+// file from raw.githubusercontent.com/<repo>/main/ (reflects the latest commit,
+// CDN-cached ~5 min — matches our refresh cadence). Absolute vendor URLs
+// (Statuspage/Instatus/etc.) are cross-origin already and pass through unchanged.
+const RAW_BASE = 'https://raw.githubusercontent.com/RJEdTech/EdTech-Status/main/';
+function resolveDataUrl(u) {
+  return /^https?:\/\//i.test(u) ? u : RAW_BASE + u;
+}
+
+//=============================================================================
 // VENDOR CONFIG
 //=============================================================================
 // Each vendor has a `tier` field that drives both visual treatment and how the
@@ -1702,7 +1717,7 @@ function buildBreakageResult({ vendorPageLabel, lastKnownSeverity, lastSuccessfu
 //   major   -> partial outage
 //   critical-> major outage
 async function fetchStatuspage(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -1733,7 +1748,7 @@ async function fetchStatuspage(vendor) {
   let incident = null;
   if (indicator !== 'none' && vendor.summaryUrl) {
     try {
-      const sumRes = await fetch(vendor.summaryUrl, { cache: 'no-store' });
+      const sumRes = await fetch(resolveDataUrl(vendor.summaryUrl), { cache: 'no-store' });
       if (sumRes.ok) {
         const sum = await sumRes.json();
         const inc = (sum.incidents || []).find(i => i.status !== 'resolved');
@@ -1812,7 +1827,7 @@ function mapStatuspageIndicator(indicator) {
 //   page.status: "UP" | "HASISSUES" | "UNDERMAINTENANCE"
 //   activeIncidents: [{ name, status, impact: "MINOROUTAGE"|"MAJOROUTAGE"|"PARTIALOUTAGE", updatedAt }]
 async function fetchInstatus(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -1899,7 +1914,7 @@ function mapInstatusImpact(impact) {
 //   a confirmed example of the down-state HTML and guessing would be fragile.
 //   Teachers click through to the vendor page for incident specifics.
 async function fetchExploreLearning(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -1952,7 +1967,7 @@ async function fetchExploreLearning(vendor) {
 //   The workflow does the severity mapping itself and writes the result to ixl.json,
 //   so this function just reads the pre-computed severity and renders.
 async function fetchIXL(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -2024,7 +2039,7 @@ async function fetchIXL(vendor) {
 //   rendered banner and maps Crisp's healthy/sick/dead replica states to one of:
 //     'operational' | 'degraded' | 'partial' | 'major'
 async function fetchGimkit(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -2093,7 +2108,7 @@ async function fetchGimkit(vendor) {
 //   We deliberately don't try to parse incident details (none exist on the page
 //   to parse). Teachers click through if anything other than operational.
 async function fetchSoundtrap(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -2147,7 +2162,7 @@ async function fetchSoundtrap(vendor) {
 //   'check_page' means the banner was present but the wording didn't match any
 //   known state — the raw banner text is captured in data.banner for debugging.
 async function fetchNoRedInk(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -2252,7 +2267,7 @@ async function fetchNoRedInk(vendor) {
 //   Severity ceiling is 'partial' (orange) for any check failure — see
 //   workflow header for rationale.
 async function fetchArbiterSports(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -2337,7 +2352,7 @@ async function fetchArbiterSports(vendor) {
 //   site outage matters for admissions impressions even outside school
 //   hours.
 async function fetchRJWebsite(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -2383,7 +2398,7 @@ async function fetchRJWebsite(vendor) {
 //   probe: severity + statusLabel/statusDetail, with parseError when the
 //   probe itself is broken (e.g., the target URL moved). Same-origin fetch.
 async function fetchSyntheticProbe(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -2440,7 +2455,7 @@ async function fetchSyntheticProbe(vendor) {
 //   workaround is "email attendance to the Dean's office". Friction,
 //   not a stoppage.
 async function fetchMyRJ(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
@@ -2493,7 +2508,7 @@ async function fetchMyRJ(vendor) {
 // banner when a *dependent service* is also red (see correlation logic in
 // renderSummary).
 async function fetchAWS(vendor) {
-  const res = await fetch(vendor.apiUrl, { cache: 'no-store' });
+  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
 
