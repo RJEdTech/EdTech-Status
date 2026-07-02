@@ -1,8 +1,7 @@
 {
-  "fetchedAt": "2026-07-02T14:55:03.107Z",
-  "source": "https://wayground.com/join",
+  "fetchedAt": "2026-04-22T18:48:00Z",
+  "source": "https://statuspage.freshping.io/621-QuizizzStatusPage/",
   "severity": "operational",
-  "detail": "HTTP 202",
   "parseError": null,
-  "lastSuccessfulParse": "2026-07-02T14:55:03.107Z"
+  "lastSuccessfulParse": "2026-04-22T18:48:00Z"
 }
