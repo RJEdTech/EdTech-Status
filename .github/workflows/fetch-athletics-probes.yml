@@ -1,0 +1,205 @@
+name: Fetch athletics probes
+
+# Reachability probes for athletics tools that have NO public status page:
+# MaxPreps, Neptune GameTime, and ATGenius. Each is a server-side HTTP check
+# (classified by response, not by scraping a banner), written to its own JSON
+# in the RJ Website / Arbiter "synthetic check" schema:
+#   severity ('operational' | 'degraded' | 'major') + statusLabel/statusDetail,
+#   with parseError when OUR probe target moved (a stale-URL 4xx).
+#
+# All three are simple single-URL GETs, so they share one workflow: probed
+# sequentially and committed in a single push (no cross-workflow push races,
+# less Actions noise). Limitation, same as the rest of the dashboard: this
+# runs from GitHub's runners, so it catches vendor-side outages, not an
+# RJ-network or Securly issue.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-athletics-probes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Probe athletics tools
+        run: |
+          node <<'EOF'
+          const https = require('https');
+          const fs = require('fs');
+
+          const TARGETS = [
+            { name: 'MaxPreps',         url: 'https://www.maxpreps.com/', out: 'maxpreps.json' },
+            { name: 'Neptune GameTime', url: 'https://neptunenow.com/',   out: 'neptune.json'  },
+            { name: 'ATGenius',         url: 'https://atgenius.com/',     out: 'atgenius.json' },
+          ];
+
+          const ATTEMPTS      = 3;      // best-of, to dampen single-request runner blips
+          const TIMEOUT_MS    = 10000;  // per attempt
+          const MAX_REDIRECTS = 5;
+          const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+                     '(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+
+          // One HTTP probe. Resolves { status } on any HTTP response (following
+          // redirects), rejects on network error / timeout. We only need the
+          // status line, so we tear down the socket immediately.
+          function probeOnce(url, redirectsLeft) {
+            return new Promise((resolve, reject) => {
+              const req = https.get(
+                url,
+                { headers: { 'User-Agent': UA, 'Accept': 'text/html' } },
+                (res) => {
+                  const status = res.statusCode;
+                  if (status >= 300 && status < 400 && res.headers.location && redirectsLeft > 0) {
+                    res.destroy();
+                    let next;
+                    try { next = new URL(res.headers.location, url).toString(); }
+                    catch (e) { resolve({ status }); return; }
+                    resolve(probeOnce(next, redirectsLeft - 1));
+                    return;
+                  }
+                  res.destroy();
+                  resolve({ status });
+                }
+              );
+              req.setTimeout(TIMEOUT_MS, () => {
+                req.destroy(new Error('timeout after ' + TIMEOUT_MS + 'ms'));
+              });
+              req.on('error', reject);
+            });
+          }
+
+          // Classify one attempt into a dashboard-facing outcome.
+          //   { kind: 'status', severity, label, detail } — a real reading
+          //   { kind: 'probeError', detail }              — reachable but not a
+          //                                                 liveness answer (stale-URL 4xx)
+          function classifyAttempt(result) {
+            const s = result.status;
+            if (s >= 200 && s < 400) return { kind: 'status', severity: 'operational', label: 'Reachable',   detail: 'HTTP ' + s };
+            if (s === 429)           return { kind: 'status', severity: 'degraded',    label: 'Throttled',   detail: 'HTTP 429' };
+            if (s >= 500)            return { kind: 'status', severity: 'major',       label: 'Unreachable', detail: 'HTTP ' + s };
+            return { kind: 'probeError', detail: 'HTTP ' + s };
+          }
+
+          // Best-of ranking (lower = preferred). ANY HTTP response proves the
+          // origin is reachable, so a reachable-but-wrong-URL result outranks
+          // "unreachable" (major).
+          function outcomeRank(o) {
+            if (o.kind === 'probeError') return 2;
+            switch (o.severity) {
+              case 'operational': return 0;
+              case 'degraded':    return 1;
+              case 'major':       return 3;
+              default:            return 3;
+            }
+          }
+
+          function readExisting(path) {
+            if (!fs.existsSync(path)) return null;
+            try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
+            catch (_) { return null; }
+          }
+
+          // Only material fields decide whether we write — timestamps are
+          // bookkeeping, so we don't commit every 5 minutes when nothing changed.
+          function contentEqual(a, b) {
+            if (!a || !b) return false;
+            const fields = ['severity', 'statusLabel', 'statusDetail', 'parseError'];
+            return fields.every(f => JSON.stringify(a[f]) === JSON.stringify(b[f]));
+          }
+
+          async function probeTarget(t) {
+            const existing = readExisting(t.out);
+            const outcomes = [];
+            for (let i = 0; i < ATTEMPTS; i++) {
+              try { outcomes.push(classifyAttempt(await probeOnce(t.url, MAX_REDIRECTS))); }
+              catch (e) {
+                outcomes.push({ kind: 'status', severity: 'major', label: 'Unreachable',
+                                detail: (e && e.message) || 'network error' });
+              }
+            }
+            outcomes.sort((a, b) => outcomeRank(a) - outcomeRank(b));
+            const best = outcomes[0];
+            const now = new Date().toISOString();
+
+            let newContent;
+            if (best.kind === 'probeError') {
+              const lastGood = existing || {};
+              newContent = {
+                severity: lastGood.severity || 'unknown',
+                statusLabel: lastGood.statusLabel || 'Unknown',
+                statusDetail: best.detail,
+                parseError: {
+                  message: t.name + ' probe returned ' + best.detail + ' — ' + t.url +
+                           ' may have moved. Update the target in fetch-athletics-probes.yml.',
+                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
+                },
+                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
+              };
+            } else {
+              const unchanged = existing && !existing.parseError &&
+                                existing.severity === best.severity &&
+                                existing.statusDetail === best.detail;
+              newContent = {
+                severity: best.severity,
+                statusLabel: best.label,
+                statusDetail: best.detail,
+                parseError: null,
+                lastSuccessfulParse: unchanged ? existing.lastSuccessfulParse : now
+              };
+            }
+
+            if (contentEqual(newContent, existing)) {
+              console.log(t.name + ': no material change (' + newContent.severity +
+                          (newContent.parseError ? ', probe error' : '') + ')');
+              return;
+            }
+            const snapshot = { fetchedAt: now, ...newContent };
+            fs.writeFileSync(t.out, JSON.stringify(snapshot, null, 2) + '\n');
+            console.log(t.name + ': wrote ' + t.out);
+            console.log(JSON.stringify(snapshot));
+          }
+
+          (async () => {
+            for (const t of TARGETS) {
+              try { await probeTarget(t); }
+              catch (e) { console.error(t.name + ': unexpected error ' + (e && e.message)); }
+            }
+          })();
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add maxpreps.json neptune.json atgenius.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update athletics probe snapshots [skip ci]"
+            git push
+          fi
+
+      - name: Fail run if any probe target is broken
+        # Red only when OUR probe needs fixing (a stale-URL 4xx = parseError).
+        # A real vendor outage is a normal detected state (severity "major") and
+        # deliberately does NOT fail the run.
+        run: |
+          broken=""
+          for f in maxpreps.json neptune.json atgenius.json; do
+            if [ -f "$f" ] && grep -q '"parseError": {' "$f"; then
+              broken="$broken $f"
+            fi
+          done
+          if [ -n "$broken" ]; then
+            echo "::error::Athletics probe target(s) returned a 4xx:$broken — a URL may have moved."
+            for f in $broken; do echo "--- $f ---"; cat "$f"; done
+            exit 1
+          fi
+          echo "Athletics probes OK."
