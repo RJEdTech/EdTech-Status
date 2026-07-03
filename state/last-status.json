@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-07-02T14:30:26.082Z",
+  "checkedAt": "2026-07-03T00:15:33.867Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "operational",
+    "blackbaud": "degraded",
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
@@ -13,14 +13,10 @@
     "copyleaks": "operational",
     "aws": "operational",
     "explorelearning": "unknown",
-    "ixl": "operational",
-    "quizizz": "breakage",
+    "ixl": "unknown",
+    "quizizz": "unknown",
     "gimkit": "operational",
     "soundtrap": "unknown",
-    "noredink": "operational",
-    "finalsite": "operational",
-    "arbitersports": "operational",
-    "rj-website": "operational",
-    "myrj": "operational"
+    "noredink": "operational"
   }
 }
