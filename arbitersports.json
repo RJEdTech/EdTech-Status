@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-07-02T23:01:15.633Z",
-  "source": "synthetic-check (go.arbitersports.com + www1.arbitersports.com)",
+  "fetchedAt": "2026-07-03T00:08:04.507Z",
+  "source": "synthetic-reachability (go.arbitersports.com + www1.arbitersports.com)",
   "severity": "operational",
   "services": [
     {
-      "name": "Login flow",
+      "name": "Login front door",
       "severity": "operational",
-      "label": "Operating normally",
-      "detail": null
+      "label": "Reachable",
+      "detail": "HTTP 302"
     },
     {
       "name": "Application",
       "severity": "operational",
-      "label": "Operating normally",
-      "detail": null
+      "label": "Reachable",
+      "detail": "HTTP 302"
     }
   ],
   "parseError": null,
-  "lastSuccessfulParse": "2026-07-02T23:01:15.633Z"
+  "lastSuccessfulParse": "2026-07-03T00:08:04.507Z"
 }
