@@ -1,21 +1,21 @@
 {
-  "checkedAt": "2026-07-14T22:11:30.810Z",
+  "checkedAt": "2026-07-14T23:13:40.588Z",
   "vendors": {
-    "instructure": "degraded",
+    "instructure": "operational",
     "blackbaud": "operational",
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
     "aspiredu": "operational",
     "kahoot": "operational",
-    "deltamath": "operational",
+    "deltamath": "breakage",
     "cloudflare": "degraded",
     "copyleaks": "operational",
     "aws": "operational",
     "explorelearning": "unknown",
     "ixl": "unknown",
     "quizizz": "unknown",
-    "gimkit": "operational",
+    "gimkit": "breakage",
     "soundtrap": "unknown",
     "noredink": "operational"
   }
