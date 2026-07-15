@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-07-15T22:16:57.106Z",
+  "fetchedAt": "2026-07-15T23:15:21.399Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
-  "severity": "operational",
-  "activeCount": 0,
-  "firstIncidentTitle": "",
+  "severity": "partial",
+  "activeCount": 1,
+  "firstIncidentTitle": "<![CDATA[Service impact: Elevated connectivity issues with a single Avalability zone]]>",
   "parseError": null,
-  "lastSuccessfulParse": "2026-07-15T22:16:57.106Z"
+  "lastSuccessfulParse": "2026-07-15T23:15:21.399Z"
 }
