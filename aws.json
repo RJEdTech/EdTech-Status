@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-07-17T11:49:06.304Z",
+  "fetchedAt": "2026-07-17T12:52:05.374Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
   "severity": "partial",
   "activeCount": 4,
   "firstIncidentTitle": "<![CDATA[Service impact: Inaccurate Estimated Billing Data]]>",
   "parseError": null,
-  "lastSuccessfulParse": "2026-07-17T11:49:06.304Z"
+  "lastSuccessfulParse": "2026-07-17T12:52:05.374Z"
 }
