@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-07-24T14:28:16.488Z",
+  "fetchedAt": "2026-07-24T15:55:49.687Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
   "severity": "partial",
-  "activeCount": 4,
+  "activeCount": 3,
   "firstIncidentTitle": "<![CDATA[Service is operating normally: [RESOLVED] Connectivity Issues]]>",
   "parseError": null,
-  "lastSuccessfulParse": "2026-07-24T14:28:16.488Z"
+  "lastSuccessfulParse": "2026-07-24T15:55:49.687Z"
 }
