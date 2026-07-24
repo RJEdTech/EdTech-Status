@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-07-24T11:18:07.469Z",
+  "fetchedAt": "2026-07-24T12:49:05.211Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
-  "severity": "operational",
-  "activeCount": 0,
-  "firstIncidentTitle": "",
+  "severity": "partial",
+  "activeCount": 3,
+  "firstIncidentTitle": "<![CDATA[Service impact: Connectivity Issues]]>",
   "parseError": null,
-  "lastSuccessfulParse": "2026-07-24T11:18:07.469Z"
+  "lastSuccessfulParse": "2026-07-24T12:49:05.211Z"
 }
