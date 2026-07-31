@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-07-31T04:39:13.105Z",
+  "checkedAt": "2026-07-31T07:34:31.128Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "degraded",
@@ -12,7 +12,7 @@
     "cloudflare": "degraded",
     "copyleaks": "operational",
     "aws": "operational",
-    "explorelearning": "unknown",
+    "explorelearning": "breakage",
     "ixl": "unknown",
     "quizizz": "unknown",
     "gimkit": "operational",
