@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-08-01T14:17:25.138Z",
+  "fetchedAt": "2026-08-01T15:31:37.934Z",
   "source": "synthetic-check",
   "target": "https://regisjesuit.myschoolapp.com/app/faculty?svcid=edu",
-  "severity": "partial",
-  "statusLabel": "Unreachable",
-  "statusDetail": "Request timed out after 15000ms",
+  "severity": "operational",
+  "statusLabel": "Operating normally",
+  "statusDetail": null,
   "parseError": null,
-  "lastSuccessfulParse": "2026-08-01T14:17:25.138Z"
+  "lastSuccessfulParse": "2026-08-01T15:31:37.934Z"
 }
