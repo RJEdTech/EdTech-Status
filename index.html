@@ -1168,21 +1168,6 @@ const VENDORS = [
     pageUrl: 'https://www.explorelearning.com/our-products/site-status',
     whatItDoes: 'Interactive simulations for science and math — used heavily in lab and concept-introduction lessons.',
     whenDown: 'Sims won\'t load; teachers fall back to demos or alternate activities.'},
-  // IXL (status.ixl.com is hosted on Uptime.com, which has no public unauthenticated
-  // JSON endpoint, so we scrape the inline JS blob via GitHub Actions to ixl.json)
-  {
-    id: 'ixl',
-    task: 'canvas',
-    category: 'practice-content',
-    name: 'IXL',
-    sub: 'status.ixl.com',
-    tier: 'secondary',
-    audience: ['teaching'],
-    type: 'ixlsnapshot',
-    apiUrl: 'ixl.json',
-    pageUrl: 'https://status.ixl.com/',
-    whatItDoes: 'Adaptive practice across math, ELA, science, and social studies. Auto-assigns based on student performance.',
-    whenDown: 'Students can\'t complete assigned practice; previously earned progress is preserved.'},
   // Gimkit (status page hosted on Crisp Status, no public unauthenticated JSON
   // endpoint, so we scrape the rendered banner via GitHub Actions to gimkit.json)
   {
@@ -1947,79 +1932,6 @@ async function fetchExploreLearning(vendor) {
       status: 'See vendor status page',
       updatedAt: null
     };
-  }
-
-  return {
-    severity,
-    statusText,
-    incident,
-    updatedAt: data.fetchedAt || new Date().toISOString()
-  };
-}
-
-// IXL snapshot file:
-//   Written by the .github/workflows/fetch-ixl.yml workflow every 5 minutes.
-//   Same-origin fetch, so no CORS issues.
-//   status.ixl.com is hosted on Uptime.com, which has no public unauthenticated
-//   JSON endpoint. The workflow scrapes the page and pulls four key flags out
-//   of the inline JS blob: global_is_operational, has_components_under_maintenance_state,
-//   has_components_under_critical_state, and the active_incidents array.
-//   The workflow does the severity mapping itself and writes the result to ixl.json,
-//   so this function just reads the pre-computed severity and renders.
-async function fetchIXL(vendor) {
-  const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-
-  // Breakage takes precedence over the underlying severity. The workflow has
-  // told us it can no longer parse the source, so the last-known severity is
-  // stale and we shouldn't present it as authoritative. We *do* still surface
-  // it in the incident detail line so the reader can judge how stale.
-  if (data.parseError) {
-    return buildBreakageResult({
-      vendorPageLabel: 'IXL status page',
-      lastKnownSeverity: data.severity,
-      lastSuccessfulParse: data.lastSuccessfulParse,
-      firstFailedAt: data.parseError.firstFailedAt,
-      errorMessage: data.parseError.message,
-      updatedAt: data.fetchedAt
-    });
-  }
-
-  const severity = data.severity || 'operational';
-  let statusText;
-  let incident = null;
-
-  switch (severity) {
-    case 'operational':
-      statusText = 'All systems operational';
-      break;
-    case 'maintenance':
-      statusText = 'Scheduled maintenance in progress';
-      incident = {
-        name: data.firstIncidentName || 'Maintenance window',
-        status: 'See vendor status page',
-        updatedAt: null
-      };
-      break;
-    case 'partial':
-      statusText = 'Partial outage reported';
-      incident = {
-        name: data.firstIncidentName || 'IXL is reporting an issue',
-        status: 'See vendor status page',
-        updatedAt: null
-      };
-      break;
-    case 'major':
-      statusText = 'Major outage reported';
-      incident = {
-        name: data.firstIncidentName || 'Critical issue affecting IXL',
-        status: 'See vendor status page',
-        updatedAt: null
-      };
-      break;
-    default:
-      statusText = 'Status unknown — see vendor page';
   }
 
   return {
@@ -3248,7 +3160,6 @@ async function fetchVendor(vendor) {
     case 'cloudflare':       return fetchCloudflare(vendor);
     case 'instatus':         return fetchInstatus(vendor);
     case 'elsnapshot':       return fetchExploreLearning(vendor);
-    case 'ixlsnapshot':      return fetchIXL(vendor);
     case 'gimkitsnapshot':   return fetchGimkit(vendor);
     case 'soundtrapsnapshot': return fetchSoundtrap(vendor);
     case 'noredinksnapshot': return fetchNoRedInk(vendor);
