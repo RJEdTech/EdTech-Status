@@ -1888,16 +1888,53 @@ function mapInstatusImpact(impact) {
 
 // ExploreLearning snapshot file:
 //   Written by the .github/workflows/fetch-explorelearning.yml workflow every 5 minutes.
-//   Same-origin fetch, so no CORS issues.
+//   Read live from raw.githubusercontent.com via resolveDataUrl().
+//
 //   ExploreLearning has no machine-readable status feed, so the workflow scrapes
-//   the public site-status page and looks for two specific markers:
-//     - id="site-status-a-ok"
-//     - <p class="... text-green ...">A-OK!
-//   When BOTH are present, status is "operational".
-//   Anything else (incident page layout, fetch error, page redesign) → "check_page".
-//   We deliberately don't try to parse incident details, since we don't have
-//   a confirmed example of the down-state HTML and guessing would be fragile.
-//   Teachers click through to the vendor page for incident specifics.
+//   the public site-status page. That page has three states, and the scraper now
+//   distinguishes all three (it previously only recognized the clean one, which
+//   meant a real vendor notice was misreported as scraper breakage):
+//
+//     A-OK        -> id="site-status-a-ok" + the green "A-OK!" heading
+//     Notice      -> that block is REPLACED by an incident block (an
+//                    <img alt="We're on it!">, a headline, a detail paragraph,
+//                    and a fixed "Our team is working to resolve the issue" closer)
+//     Unrecognized -> neither; real breakage, surfaced via parseError
+//
+//   Snapshot shape:
+//     {
+//       fetchedAt, source, status, lastSuccessfulParse,
+//       notice: null | { kind: 'maintenance'|'incident', headline, detail, affectsRJ },
+//       parseError: null | { message, firstFailedAt }
+//     }
+//
+//   status: 'operational' | 'maintenance' | 'degraded' | 'check_page' | 'unknown'
+//
+//   RJ SCOPING: RJ uses Gizmos. When a notice names ONLY non-RJ products
+//   (Reflex / Frax / Science4Us) the workflow sets affectsRJ:false and leaves
+//   status 'operational' — same component-filtering principle as the Cloudflare
+//   tile. The tile stays green but still SHOWS the notice, so a teacher who
+//   heard "ExploreLearning is down" can see what was actually posted.
+function mapExploreLearningStatus(status) {
+  switch ((status || '').trim()) {
+    case 'operational': return 'operational';
+    // Maintenance renders yellow, matching the convention in
+    // mapStatuspageIndicator() and the NoRedInk fetcher.
+    case 'maintenance': return 'degraded';
+    case 'degraded':    return 'degraded';
+    // Page still identifiable but not in a state we can read confidently.
+    case 'check_page':  return 'partial';
+    default:            return null;
+  }
+}
+
+// Notice detail can run to ~1000 chars in the snapshot; tiles need a sentence.
+function truncateNotice(s, max) {
+  if (!s) return null;
+  const t = String(s).trim();
+  return t.length <= max ? t : t.slice(0, max - 1).trimEnd() + '…';
+}
+
 async function fetchExploreLearning(vendor) {
   const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1906,8 +1943,7 @@ async function fetchExploreLearning(vendor) {
   if (data.parseError) {
     return buildBreakageResult({
       vendorPageLabel: 'ExploreLearning status page',
-      lastKnownSeverity: data.status === 'operational' ? 'operational' :
-                         data.status === 'check_page' ? 'partial' : null,
+      lastKnownSeverity: mapExploreLearningStatus(data.status),
       lastSuccessfulParse: data.lastSuccessfulParse,
       firstFailedAt: data.parseError.firstFailedAt,
       errorMessage: data.parseError.message,
@@ -1915,20 +1951,50 @@ async function fetchExploreLearning(vendor) {
     });
   }
 
-  const status = (data.status || '').trim();
-  const isOperational = status === 'operational';
+  const severity = mapExploreLearningStatus(data.status) || 'unknown';
+  const notice   = data.notice || null;
+  const headline = notice && notice.headline ? truncateNotice(notice.headline, 140) : null;
+  const detail   = notice && notice.detail   ? truncateNotice(notice.detail, 180)   : null;
 
-  let severity = 'operational';
-  let statusText = 'A-OK — all sites operational';
+  let statusText;
   let incident = null;
 
-  if (!isOperational) {
-    // We can't tell major vs partial without parsing the incident page, so we
-    // mark as "partial" — visible enough to draw attention without overstating.
-    severity = 'partial';
-    statusText = 'Issue reported — see vendor page for details';
+  if (severity === 'operational') {
+    if (notice) {
+      statusText = vendor.name + ' operational — notice posted for another ExploreLearning product';
+      incident = {
+        name: headline || 'ExploreLearning has posted a notice',
+        status: detail || 'Does not affect ' + vendor.name,
+        updatedAt: null
+      };
+    } else {
+      statusText = 'A-OK — all sites operational';
+    }
+  } else if (severity === 'degraded') {
+    const isMaintenance = (data.status || '').trim() === 'maintenance'
+      || (notice && notice.kind === 'maintenance');
+    statusText = isMaintenance ? 'Scheduled maintenance' : 'Issue reported';
     incident = {
-      name: 'ExploreLearning is reporting an issue',
+      name: headline || (isMaintenance
+        ? 'ExploreLearning maintenance window'
+        : 'ExploreLearning is reporting an issue'),
+      status: detail || 'See vendor status page',
+      updatedAt: null
+    };
+  } else if (severity === 'partial') {
+    // 'check_page': the A-OK marker id was present but the green heading wasn't,
+    // and no notice block was found. Visible enough to prompt a click-through
+    // without overstating what we actually know.
+    statusText = 'Unknown status — see vendor page';
+    incident = {
+      name: 'ExploreLearning status page in an unrecognized state',
+      status: 'See vendor status page',
+      updatedAt: null
+    };
+  } else {
+    statusText = 'Status unknown — see vendor page';
+    incident = {
+      name: 'Unrecognized status value: "' + (data.status || '') + '"',
       status: 'See vendor status page',
       updatedAt: null
     };
@@ -1941,7 +2007,7 @@ async function fetchExploreLearning(vendor) {
     updatedAt: data.fetchedAt || new Date().toISOString()
   };
 }
-
+     
 // Gimkit snapshot file:
 //   Written by the .github/workflows/fetch-gimkit.yml workflow every 5 minutes.
 //   Same-origin fetch, so no CORS issues.
