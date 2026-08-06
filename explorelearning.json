@@ -1,13 +1,8 @@
 {
-  "fetchedAt": "2026-08-06T01:00:58.081Z",
+  "fetchedAt": "2026-08-06T04:21:29.458Z",
   "source": "https://www.explorelearning.com/our-products/site-status",
   "status": "operational",
-  "notice": {
-    "kind": "maintenance",
-    "headline": "Reflex Planned Maintenance: Sat., August 1 (8:00 am – 12:00 pm EDT)",
-    "detail": "ExploreK12 Reflex will undergo scheduled maintenance as we perform system upgrades. During this time, Reflex will be unavailable. Thank you for your patience!",
-    "affectsRJ": false
-  },
+  "notice": null,
   "parseError": null,
-  "lastSuccessfulParse": "2026-08-06T01:00:58.081Z"
+  "lastSuccessfulParse": "2026-08-06T04:21:29.458Z"
 }
