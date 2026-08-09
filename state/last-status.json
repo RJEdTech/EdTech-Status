@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-08-09T21:17:40.052Z",
+  "checkedAt": "2026-08-09T21:53:20.110Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "degraded",
@@ -19,7 +19,7 @@
     "soundtrap": "operational",
     "noredink": "operational",
     "arbitersports": "operational",
-    "maxpreps": "breakage",
+    "maxpreps": "operational",
     "neptune": "operational",
     "atgenius": "operational",
     "aws": "operational",
