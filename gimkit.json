@@ -1,10 +1,7 @@
 {
-  "fetchedAt": "2026-08-10T21:10:02.150Z",
+  "fetchedAt": "2026-08-10T21:59:27.354Z",
   "source": "https://gimkit.crisp.watch/en/",
   "severity": "operational",
-  "parseError": {
-    "message": "Page loaded but no known Crisp Status banner found — wording may have changed.",
-    "firstFailedAt": "2026-08-10T21:10:02.150Z"
-  },
-  "lastSuccessfulParse": "2026-08-10T20:21:14.304Z"
+  "parseError": null,
+  "lastSuccessfulParse": "2026-08-10T21:59:27.354Z"
 }
