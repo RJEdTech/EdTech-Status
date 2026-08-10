@@ -1,9 +1,9 @@
 {
-  "checkedAt": "2026-08-10T21:49:44.182Z",
+  "checkedAt": "2026-08-10T22:22:19.842Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
-    "myrj": "operational",
+    "myrj": "partial",
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
@@ -15,7 +15,7 @@
     "finalsite": "operational",
     "hudl": "operational",
     "explorelearning": "operational",
-    "gimkit": "breakage",
+    "gimkit": "operational",
     "soundtrap": "operational",
     "noredink": "operational",
     "arbitersports": "operational",
