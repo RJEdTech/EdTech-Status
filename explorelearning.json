@@ -1,8 +1,11 @@
 {
-  "fetchedAt": "2026-08-13T11:57:01.072Z",
+  "fetchedAt": "2026-08-13T13:13:12.373Z",
   "source": "https://www.explorelearning.com/our-products/site-status",
   "status": "operational",
   "notice": null,
-  "parseError": null,
+  "parseError": {
+    "message": "Timed out after 15s fetching the status page.",
+    "firstFailedAt": "2026-08-13T13:13:12.373Z"
+  },
   "lastSuccessfulParse": "2026-08-13T11:57:01.072Z"
 }
