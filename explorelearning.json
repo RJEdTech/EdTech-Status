@@ -1,8 +1,9 @@
 {
-  "fetchedAt": "2026-08-13T20:17:11.700Z",
+  "fetchedAt": "2026-08-13T21:28:47.010Z",
   "source": "https://www.explorelearning.com/our-products/site-status",
   "status": "operational",
   "notice": null,
   "parseError": null,
-  "lastSuccessfulParse": "2026-08-13T20:17:11.700Z"
+  "fetchTrouble": null,
+  "lastSuccessfulParse": "2026-08-13T21:28:47.010Z"
 }
