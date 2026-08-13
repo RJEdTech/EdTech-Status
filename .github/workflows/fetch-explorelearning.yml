@@ -1,280 +1,51 @@
 name: Fetch ExploreLearning status
 
+# ExploreLearning has no machine-readable status feed, so the public site-status
+# page is scraped for its two known states plus any incident notice.
+#
+# The parsing logic is NOT in this file. It lives in
+# .github/scripts/vendors/explorelearning.js, which is a plain Node module, so it can be
+# read, linted and unit-tested (`node --test .github/scripts/test/`) instead of
+# living in a YAML heredoc where five copies of the same helper code drifted
+# apart. The shared fetch/retry/grace-period machinery is in
+# .github/scripts/snapshot-lib.js.
+#
+# Failure handling, in short: a timeout or 5xx is retried 3x within the run and
+# then tolerated for 3 consecutive runs before the tile is allowed to go grey,
+# because a single flaky fetch is not a broken scraper. A page we do not
+# recognise is reported immediately, because that never fixes itself.
+
 on:
   schedule:
-    # Every 5 minutes. GitHub may delay scheduled runs during high load,
-    # so actual cadence can be 5-15 minutes — fine for our purposes.
-    - cron: '*/5 * * * *'
+    # Every 5 minutes, offset to stagger against the other scrapers. GitHub may
+    # delay scheduled runs during high load, so actual cadence can be 5-15
+    # minutes — fine for our purposes. The offset only reduces collisions; the
+    # commit-snapshot action is what actually makes concurrent pushes safe.
+    - cron: '1-59/5 * * * *'
   workflow_dispatch:  # Allow manual runs from the Actions tab
 
 permissions:
   contents: write  # Needed to commit the updated JSON file
 
+# Never let two runs of this workflow overlap — a delayed run colliding with the
+# next scheduled one would race against itself on the push.
+concurrency:
+  group: fetch-explorelearning
+  cancel-in-progress: false
+
 jobs:
   fetch-explorelearning:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Fetch and parse ExploreLearning status page
-        run: |
-          node <<'EOF'
-          const https = require('https');
-          const fs = require('fs');
+        run: node .github/scripts/fetch-snapshot.js explorelearning
 
-          const PAGE_URL = 'https://www.explorelearning.com/our-products/site-status';
-          const OUT_PATH = 'explorelearning.json';
-          const ALLOWED_HOST = 'explorelearning.com';
-
-          function fetchUrl(url, depth) {
-            depth = depth || 0;
-            return new Promise((resolve, reject) => {
-              if (depth > 3) {
-                reject(new Error('Too many redirects fetching the status page.'));
-                return;
-              }
-              const req = https.get(url, { headers: { 'User-Agent': 'rjedtech-status-dashboard' } }, (res) => {
-                const code = res.statusCode;
-                if (code >= 300 && code < 400 && res.headers.location) {
-                  const next = new URL(res.headers.location, url);
-                  res.resume();
-                  if (next.hostname !== ALLOWED_HOST && !next.hostname.endsWith('.' + ALLOWED_HOST)) {
-                    reject(new Error('Status page redirected off-domain to ' + next.hostname + ' — URL may have moved.'));
-                    return;
-                  }
-                  resolve(fetchUrl(next.toString(), depth + 1));
-                  return;
-                }
-                if (code !== 200) {
-                  res.resume();
-                  reject(new Error('HTTP ' + code));
-                  return;
-                }
-                res.setEncoding('utf8');
-                let body = '';
-                res.on('data', (chunk) => body += chunk);
-                res.on('end', () => resolve(body));
-              });
-              req.on('error', reject);
-              req.setTimeout(15000, () => {
-                req.destroy(new Error('Timed out after 15s fetching the status page.'));
-              });
-            });
-          }
-
-          // ------------------------------------------------------------------
-          // Detection logic: ExploreLearning's page has three known states.
-          //
-          //   "A-OK" (operational) — the page contains:
-          //     - an element with id="site-status-a-ok"
-          //     - the heading "A-OK!" inside <p class="h1 xbold mb-0 text-green">
-          //     - text: "All ExploreLearning sites are currently working with no issues."
-          //
-          //   "Notice posted" — the A-OK block is REPLACED by an incident block.
-          //     Confirmed live on 2026-07-31 (page meta-pubdate 7/31/2026 1:26 AM):
-          //     an <img alt="We're on it!">, a headline, a detail paragraph, and the
-          //     fixed closer "Our team is working to resolve the issue as soon as
-          //     possible." The id="site-status-a-ok" marker is GONE in this state,
-          //     which is what broke the previous two-state parser: a real vendor
-          //     notice was misread as page breakage. We key on the alt text and the
-          //     closer boilerplate (both state-specific) rather than on class names,
-          //     which we have no confirmed sample of.
-          //
-          //   "Page unrecognized" — none of the above. Either the URL changed, the
-          //   page was redesigned, or we got a different page entirely. This is
-          //   breakage, not an outage.
-          //
-          // RJ scoping: RJ uses Gizmos. A notice that names ONLY non-RJ products
-          // (Reflex / Frax / Science4Us) is recorded but does not degrade our tile —
-          // same component-filtering principle applied to Cloudflare.
-          // ------------------------------------------------------------------
-
-          const RJ_PRODUCTS = /\bgizmos?\b/i;
-          const OTHER_PRODUCTS = /\b(reflex|frax|science\s?4\s?us)\b/i;
-          const SITEWIDE = /\b(all\s+explorelearning\s+sites|all\s+sites|all\s+products|explorelearning\s+sites|explorelearning\.com)\b/i;
-          const MAINTENANCE = /\b(planned|scheduled)\s+maintenance\b|\bmaintenance\s+window\b/i;
-
-          // Incident-state anchors (both are specific to the notice block)
-          const ALT_MARKER = /alt=["'][^"']{0,24}we(?:'|&#0*39;|&#x0*27;|&rsquo;|&#0*8217;|&#x0*2019;|\u2019)?re\s+on\s+it[^"']*["']/i;
-          const CLOSER = /Our\s+team\s+is\s+working\s+to\s+resolve\s+the\s+issue/i;
-
-          function decodeEntities(s) {
-            return s
-              .replace(/&nbsp;|&#0*160;/gi, ' ')
-              .replace(/&amp;|&#0*38;/gi, '&')
-              .replace(/&lt;|&#0*60;/gi, '<')
-              .replace(/&gt;|&#0*62;/gi, '>')
-              .replace(/&quot;|&#0*34;|&ldquo;|&rdquo;/gi, '"')
-              .replace(/&#0*39;|&#x0*27;|&rsquo;|&lsquo;|&#0*8217;/gi, "'")
-              .replace(/&ndash;|&#0*8211;/gi, '-')
-              .replace(/&mdash;|&#0*8212;/gi, '--')
-              .replace(/&hellip;|&#0*8230;/gi, '...')
-              .replace(/&#0*8203;/gi, '');
-          }
-
-          function textBlocks(fragment) {
-            const stripped = fragment
-              .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-              .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-              .replace(/<!--[\s\S]*?-->/g, ' ')
-              .replace(/<[^>]*>/g, '\n');
-            return decodeEntities(stripped)
-              .split(/\n+/)
-              .map(s => s.replace(/\s+/g, ' ').trim())
-              .filter(s => s.length > 1)
-              .filter(s => !/^skip to /i.test(s))
-              .filter(s => !CLOSER.test(s));
-          }
-
-          function parseNotice(html) {
-            const altHit = html.match(ALT_MARKER);
-            const closerHit = html.match(CLOSER);
-            let startIdx = -1;
-            if (altHit) {
-              // Resume AFTER the closing bracket of the <img> tag, otherwise the
-              // leftover attribute text would be read as the headline.
-              const tagEnd = html.indexOf('>', altHit.index + altHit[0].length - 1);
-              startIdx = tagEnd === -1 ? altHit.index + altHit[0].length : tagEnd + 1;
-            } else if (closerHit) {
-              startIdx = Math.max(0, closerHit.index - 4000);
-            }
-            if (startIdx < 0) return null;
-            const endIdx = (closerHit && closerHit.index > startIdx) ? closerHit.index : Math.min(html.length, startIdx + 6000);
-
-            const blocks = textBlocks(html.slice(startIdx, endIdx));
-            const headline = (blocks[0] || 'ExploreLearning has posted a notice on its status page.').slice(0, 300);
-            const detail = blocks.slice(1).join(' ').slice(0, 1000) || null;
-
-            const text = headline + ' ' + (detail || '');
-            const kind = MAINTENANCE.test(text) ? 'maintenance' : 'incident';
-            const namesRJ = RJ_PRODUCTS.test(text);
-            const namesOther = OTHER_PRODUCTS.test(text);
-            const sitewide = SITEWIDE.test(text);
-            // Only scope OUT when the notice exclusively names non-RJ products.
-            const affectsRJ = sitewide || namesRJ || !namesOther;
-
-            return { kind: kind, headline: headline, detail: detail, affectsRJ: affectsRJ };
-          }
-
-          function classify(html) {
-            const hasOkId = /id=["']site-status-a-ok["']/i.test(html);
-            const hasGreenAOk = /class=["'][^"']*text-green[^"']*["'][^>]*>\s*A-OK!/i.test(html);
-            const hasNotice = ALT_MARKER.test(html) || CLOSER.test(html);
-
-            if (hasNotice) {
-              const notice = parseNotice(html);
-              if (notice) {
-                let status;
-                if (!notice.affectsRJ) status = 'operational';
-                else if (notice.kind === 'maintenance') status = 'maintenance';
-                else status = 'degraded';
-                return { status: status, notice: notice };
-              }
-            }
-            if (hasOkId && hasGreenAOk) return { status: 'operational', notice: null };
-            if (hasOkId) return { status: 'check_page', notice: null };
-            throw new Error('No A-OK block and no notice block found on the page — ExploreLearning may have redesigned the status page or changed the URL.');
-          }
-
-          (async () => {
-            function readExisting() {
-              if (!fs.existsSync(OUT_PATH)) return null;
-              try {
-                return JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
-              } catch (_) {
-                return null;
-              }
-            }
-
-            // Compare content fields. NOTE: lastSuccessfulParse is included, so a
-            // successful run always differs from the previous snapshot and writes —
-            // that is what keeps fetchedAt fresh on the dashboard. (Unchanged from
-            // the previous version.) On the FAILURE path every field is carried over
-            // from the last good snapshot, so a repeated failure writes nothing and
-            // fetchedAt freezes at the moment of first breakage. Dropping
-            // 'lastSuccessfulParse' from this list would make writes change-only and
-            // cut commit churn, at the cost of a fetchedAt that no longer proves the
-            // scraper ran. Left as-is deliberately.
-            function contentEqual(a, b) {
-              if (!a || !b) return false;
-              const fields = ['source', 'status', 'notice', 'parseError', 'lastSuccessfulParse'];
-              return fields.every(f => JSON.stringify(a[f] === undefined ? null : a[f]) === JSON.stringify(b[f] === undefined ? null : b[f]));
-            }
-
-            const existing = readExisting();
-
-            try {
-              const html = await fetchUrl(PAGE_URL);
-              const result = classify(html);
-
-              const now = new Date().toISOString();
-              const newContent = {
-                source: PAGE_URL,
-                status: result.status,
-                notice: result.notice,       // null when the page is clean
-                parseError: null,            // explicitly cleared on success
-                lastSuccessfulParse: now     // updated on every successful parse
-              };
-
-              if (contentEqual(newContent, existing)) {
-                console.log('No content change — skipping write. Current status:', result.status);
-                return;
-              }
-
-              const snapshot = { fetchedAt: now, ...newContent };
-              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
-              console.log('Status content changed — wrote', OUT_PATH);
-              console.log(JSON.stringify(snapshot, null, 2));
-            } catch (err) {
-              console.error('Failed to fetch/parse ExploreLearning status page:', err.message);
-
-              const now = new Date().toISOString();
-              const lastGood = existing || {};
-              const newContent = {
-                source: PAGE_URL,
-                status: lastGood.status || 'unknown',
-                notice: lastGood.notice || null,
-                parseError: {
-                  message: err.message,
-                  firstFailedAt: (lastGood.parseError && lastGood.parseError.firstFailedAt) || now
-                },
-                lastSuccessfulParse: lastGood.lastSuccessfulParse || null
-              };
-
-              if (contentEqual(newContent, existing)) {
-                console.log('Parse still failing with same error — skipping write.');
-                return;
-              }
-
-              const snapshot = { fetchedAt: now, ...newContent };
-              fs.writeFileSync(OUT_PATH, JSON.stringify(snapshot, null, 2) + '\n');
-              console.log('Wrote breakage snapshot to', OUT_PATH);
-              console.log(JSON.stringify(snapshot, null, 2));
-            }
-          })();
-          EOF
-
-      - name: Commit if changed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add explorelearning.json
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "Update ExploreLearning status snapshot [skip ci]"
-            git push
-          fi
-
-      - name: Fail run if scraper is broken
-        # Red run == the scraper cannot READ the page. A vendor notice is a normal
-        # parse result now (status: maintenance/degraded/operational + notice block)
-        # and leaves this step green — the dashboard surfaces it from the JSON.
-        run: |
-          if [ -f explorelearning.json ] && grep -qE '"parseError"[[:space:]]*:[[:space:]]*\{' explorelearning.json; then
-            echo "::error::ExploreLearning scraper could not recognize the page. See explorelearning.json for details."
-            cat explorelearning.json
-            exit 1
-          fi
-          echo "ExploreLearning scraper succeeded."
+      - name: Commit and report
+        uses: ./.github/actions/commit-snapshot
+        with:
+          files: explorelearning.json
+          message: Update ExploreLearning status snapshot

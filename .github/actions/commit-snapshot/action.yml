@@ -1,0 +1,139 @@
+name: Commit snapshot
+description: >
+  Commit one or more status snapshot files to main in a way that survives the
+  push race between the scraper workflows, then report scraper health to GitHub.
+
+inputs:
+  files:
+    description: Space-separated snapshot file(s) to commit.
+    required: true
+  message:
+    description: Commit message (a "[skip ci]" suffix is added automatically).
+    required: true
+  attempts:
+    description: How many times to retry a rejected push.
+    required: false
+    default: '5'
+  report-health:
+    description: >
+      When 'true', fail the run if any file carries a parseError, and log a
+      warning (without failing) if any file carries a fetchTrouble.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    # ---------------------------------------------------------------------------
+    # Why this is not just `git push`:
+    #
+    # Nine scraper workflows are scheduled every 5 minutes and all commit to the
+    # same branch. Even with staggered cron offsets, GitHub batches delayed
+    # scheduled runs, so two workflows landing in the same second is routine, and
+    # the loser gets "! [rejected] main -> main (fetch first)".
+    #
+    # We do NOT rebase. Each workflow owns its own JSON file exclusively, and the
+    # copy we just generated is by definition the freshest reading, so the correct
+    # merge semantic is simply: re-apply our file on top of whatever landed and
+    # commit again. That also avoids rebasing inside a shallow clone, where the
+    # merge base may not be present.
+    # ---------------------------------------------------------------------------
+    - name: Commit and push (race-safe)
+      shell: bash
+      env:
+        FILES: ${{ inputs.files }}
+        MESSAGE: ${{ inputs.message }}
+        ATTEMPTS: ${{ inputs.attempts }}
+      run: |
+        set -euo pipefail
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        if git diff --quiet -- $FILES; then
+          echo "No changes to commit."
+          exit 0
+        fi
+
+        # Stash our versions outside the work tree so we can re-apply them after
+        # syncing to whatever another workflow pushed while we were running.
+        STASH="$RUNNER_TEMP/snapshot-stash"
+        mkdir -p "$STASH"
+        for f in $FILES; do
+          [ -f "$f" ] && cp "$f" "$STASH/$(basename "$f")"
+        done
+
+        for attempt in $(seq 1 "$ATTEMPTS"); do
+          git add $FILES
+
+          if git diff --staged --quiet; then
+            echo "Nothing left to commit after sync — another run already published this reading."
+            exit 0
+          fi
+
+          git commit -m "$MESSAGE [skip ci]"
+
+          if git push origin HEAD:main; then
+            echo "Pushed on attempt $attempt."
+            exit 0
+          fi
+
+          echo "Push rejected on attempt $attempt — another workflow pushed first. Re-syncing."
+          # Jitter, so two workflows that collided do not retry on the same beat.
+          sleep $(( (RANDOM % 6) + attempt * 2 ))
+
+          # --depth=1: these runners use a shallow checkout, and we only ever
+          # need the remote tip to re-apply onto.
+          git fetch --depth=1 origin main
+          git reset --hard FETCH_HEAD
+          for f in $FILES; do
+            [ -f "$STASH/$(basename "$f")" ] && cp "$STASH/$(basename "$f")" "$f"
+          done
+        done
+
+        echo "::error::Could not push $FILES after $ATTEMPTS attempts — main is unusually busy."
+        exit 1
+
+    # ---------------------------------------------------------------------------
+    # Health gate. Red X means "a human needs to fix the scraper", never "the
+    # vendor is having a bad day" — a real vendor outage is a normal reading and
+    # must keep the run green, otherwise the Actions tab stops meaning anything.
+    # ---------------------------------------------------------------------------
+    - name: Report scraper health
+      if: ${{ inputs.report-health == 'true' }}
+      shell: bash
+      env:
+        FILES: ${{ inputs.files }}
+      run: |
+        set -uo pipefail
+        broken=""
+        flaky=""
+        missing=""
+
+        for f in $FILES; do
+          if [ ! -f "$f" ]; then
+            missing="$missing $f"
+          elif grep -q '"parseError": {' "$f"; then
+            broken="$broken $f"
+          elif grep -q '"fetchTrouble": {' "$f"; then
+            flaky="$flaky $f"
+          fi
+        done
+
+        if [ -n "$flaky" ]; then
+          echo "::warning::Fetch failed this run but is within the retry grace period:$flaky. Last known reading retained; tile unchanged."
+          for f in $flaky; do echo "--- $f ---"; cat "$f"; done
+        fi
+
+        if [ -n "$missing" ]; then
+          echo "::error::Snapshot file(s) missing:$missing"
+          exit 1
+        fi
+
+        if [ -n "$broken" ]; then
+          echo "::error::Scraper could not recognise the source for:$broken — the page or URL likely changed."
+          for f in $broken; do echo "--- $f ---"; cat "$f"; done
+          exit 1
+        fi
+
+        echo "Scraper health OK."
