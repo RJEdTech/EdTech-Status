@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-08-13T14:02:11.930Z",
+  "checkedAt": "2026-08-13T15:11:11.657Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -14,7 +14,7 @@
     "deltamath": "operational",
     "finalsite": "degraded",
     "hudl": "operational",
-    "explorelearning": "breakage",
+    "explorelearning": "operational",
     "gimkit": "operational",
     "soundtrap": "operational",
     "noredink": "operational",
