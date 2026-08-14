@@ -631,7 +631,7 @@
     padding-top: 8px;
   }
   /* Stale reading — the snapshot file behind this tile has not been refreshed
-     in over 90 minutes, which means the workflow that writes it has stopped
+     in over 2 hours, which means the workflow that writes it has stopped
      running. Deliberately understated: this warns about OUR pipeline, not about
      the vendor, so it must not compete with the status dot for attention. */
   .mono.is-stale {
@@ -2582,11 +2582,11 @@ function severityRank(sev) {
 // tolerance is that a scraper which dies quietly looks exactly like a healthy
 // one reporting green. This is the check that closes that gap.
 //
-// 90 minutes = the 60-minute heartbeat plus headroom, because GitHub delays
-// scheduled runs under load and a 5-minute cron can genuinely land 15+ minutes
+// 2 hours = the 45-minute heartbeat plus generous headroom, because GitHub delays
+// scheduled runs heavily — an every-15-min cron often runs only every 45-90 min
 // late. Runtime API fetches (Statuspage, Instatus, Cloudflare) stamp updatedAt
 // at fetch time, so this can only ever fire on a snapshot-backed tile.
-const STALE_AFTER_MS = 90 * 60 * 1000;
+const STALE_AFTER_MS = 120 * 60 * 1000;
 
 function isStaleReading(result) {
   if (!result || !result.updatedAt) return false;
@@ -2777,7 +2777,7 @@ function renderTile(vendor, result) {
     if (isStaleReading(result) && result.severity !== 'breakage') {
       ts.classList.add('is-stale');
       ts.textContent = 'last checked ' + ts.textContent;
-      ts.title = 'This reading has not refreshed in over 90 minutes, so the '
+      ts.title = 'This reading has not refreshed in over 2 hours, so the '
         + 'status shown may be out of date. The check that updates this tile '
         + 'has probably stopped running — open the vendor page to verify.';
     }

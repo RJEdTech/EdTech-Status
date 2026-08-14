@@ -99,11 +99,11 @@ describe('successful reads', () => {
 
   test('refreshes timestamps once the heartbeat interval has passed', async () => {
     await lib.updateSnapshot(vendor(), { now: at(0) });
-    assert.equal((await lib.updateSnapshot(vendor(), { now: at(59) })).action, 'skipped');
+    assert.equal((await lib.updateSnapshot(vendor(), { now: at(44) })).action, 'skipped');
 
-    const res = await lib.updateSnapshot(vendor(), { now: at(61) });
+    const res = await lib.updateSnapshot(vendor(), { now: at(46) });
     assert.equal(res.action, 'written');
-    assert.equal(read().lastSuccessfulParse, at(61));
+    assert.equal(read().lastSuccessfulParse, at(46));
   });
 });
 
@@ -253,7 +253,7 @@ describe('vendor modules', () => {
         'parseError', 'fetchTrouble', 'lastSuccessfulParse',
       ];
       // fetchTrouble is new; every other key must line up in the same order.
-      assert.deepEqual(producedKeys.filter((k) => k !== 'fetchTrouble'), existingKeys,
+      assert.deepEqual(producedKeys.filter((k) => k !== 'fetchTrouble'), existingKeys.filter((k) => k !== 'fetchTrouble'),
         name + ': field order changed — index.html and alert-changes.yml read these by name');
     });
   }

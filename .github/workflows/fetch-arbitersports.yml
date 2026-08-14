@@ -2,12 +2,12 @@ name: Fetch ArbiterSports status
 
 on:
   schedule:
-    # Every 5 minutes. GitHub may delay scheduled runs during high load,
+    # Every 15 minutes. GitHub may delay scheduled runs during high load,
     # so actual cadence can be 5-15 minutes — fine for our purposes.
     # The minute offset only spreads the nine scrapers out so they collide
     # less often; the commit-snapshot action is what actually makes the
     # pushes safe when they do collide.
-    - cron: '0-59/5 * * * *'
+    - cron: '1-59/15 * * * *'
   workflow_dispatch:  # Allow manual runs from the Actions tab
 
 permissions:

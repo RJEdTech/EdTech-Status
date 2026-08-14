@@ -49,7 +49,7 @@ const DEFAULTS = {
   maxRedirects: 3,
   allowedHost: null,       // when set, a redirect off this host is BREAKAGE, not a fetch
   failureGrace: 3,         // consecutive failed RUNS tolerated before breakage
-  heartbeatMs: 60 * 60 * 1000, // refresh lastSuccessfulParse at most hourly
+  heartbeatMs: 45 * 60 * 1000, // refresh lastSuccessfulParse at most every 45 min
   userAgent: 'rjedtech-status-dashboard',
   accept: '*/*',
 };
