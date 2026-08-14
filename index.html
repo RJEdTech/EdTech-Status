@@ -812,6 +812,52 @@
     .watermark { background-size: min(50vh, 320px) auto; }
   }
 </style>
+<style id="redesign-overrides">
+/* ============ REDESIGN OVERRIDES (calm, modern, mobile-first, accessible) ============ */
+:root[data-theme="light"] { --bg: #f4f5f7; --surface: #ffffff; }
+.watermark { display: none !important; }
+body { background: var(--bg); }
+.container { max-width: 1180px; }
+
+/* verdict hero */
+.plain-banner { border-radius: 16px; padding: 18px 20px; gap: 16px; align-items: center;
+  box-shadow: 0 2px 6px rgba(15,15,26,0.05), 0 12px 32px rgba(15,15,26,0.06); }
+:root[data-theme="dark"] .plain-banner { box-shadow: 0 2px 8px rgba(0,0,0,0.45), 0 16px 40px rgba(0,0,0,0.4); }
+.plain-banner-icon { width: 50px; height: 50px; border-radius: 50%; }
+.plain-banner-headline { font-size: 20px; font-weight: 750; letter-spacing: -0.3px; }
+.plain-banner-detail { font-size: 13.5px; }
+
+/* filter pills */
+.audience-btn { border-radius: 999px; }
+.btn { border-radius: 9px; }
+
+/* section rhythm */
+.section-label { margin-top: 24px; }
+
+/* mobile-first grid */
+[id^="taskGrid-"] { grid-template-columns: 1fr !important; gap: 9px !important; }
+@media (min-width: 500px)  { [id^="taskGrid-"] { grid-template-columns: 1fr 1fr !important; } }
+@media (min-width: 820px)  { [id^="taskGrid-"] { grid-template-columns: 1fr 1fr 1fr !important; } }
+@media (min-width: 1080px) { [id^="taskGrid-"] { grid-template-columns: 1fr 1fr 1fr 1fr !important; } }
+
+/* tiles as clean elevated cards */
+.tile { border-radius: 12px; border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(15,15,26,0.05), 0 4px 14px rgba(15,15,26,0.04); }
+:root[data-theme="dark"] .tile { box-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 6px 18px rgba(0,0,0,0.3); }
+.tile.is-compact .tile-correlation { display: none; }
+
+/* status dot -> accessible icon (shape + colour) */
+.status-row .dot { width: 18px; height: 18px; border-radius: 0; margin-right: 6px; background: transparent !important;
+  box-shadow: none !important; display: inline-grid; place-items: center; }
+.status-row .dot::after { content: none !important; display: none !important; }
+.status-row .dot svg { width: 17px; height: 17px; display: block; }
+.status-row .dot.operational { color: var(--ok); }
+.status-row .dot.degraded    { color: var(--warn); }
+.status-row .dot.partial     { color: var(--alert); }
+.status-row .dot.major       { color: var(--crit); }
+.status-row .dot.unknown     { color: var(--neutral); }
+.status-row .dot.breakage    { color: var(--slate); }
+</style>
 </head>
 <body>
 <div class="watermark" aria-hidden="true"></div>
@@ -870,9 +916,8 @@
        visit is "All" so users see the full picture and can opt in to a
        narrower view. Selection persists per-browser via localStorage. -->
   <div class="audience-toggle" role="group" aria-label="Audience filter">
-    <button type="button" class="audience-btn" data-audience="all">All</button>
     <button type="button" class="audience-btn" data-audience="teaching">Teaching</button>
-    <button type="button" class="audience-btn" data-audience="operations">Operations</button>
+    <button type="button" class="audience-btn" data-audience="all">Everything</button>
   </div>
 
   <!-- ================================================================
@@ -988,6 +1033,13 @@ const SECTIONS = {
     { id: 'safety',     label: 'Safety & communication', note: 'Emergency notifications and safety systems', categories: ['safety-ops'] },
     { id: 'comm',       label: 'Email & communication', note: 'Outlook and Teams', categories: ['email-comm'] },
     { id: 'canvas',     label: 'Canvas integrations',   note: 'Tools that plug into Canvas for grading, practice, and assessment', categories: ['quiz-proctoring', 'plagiarism', 'analytics', 'practice-content', 'engagement-canvas'] },
+    { id: 'other',      label: 'Other teaching tools',  note: 'General-purpose tools some teachers use', categories: ['engagement-standalone'] }
+  ],
+  everything: [
+    { id: 'teach',      label: 'Sign in & teach today', note: 'Everything you need for class to happen', categories: ['signin', 'lms-core', 'display', 'ai-tutoring'] },
+    { id: 'safety',     label: 'Safety & communication', note: 'Emergency notifications and safety systems', categories: ['safety-ops'] },
+    { id: 'comm',       label: 'Email & communication', note: 'Outlook and Teams', categories: ['email-comm'] },
+    { id: 'canvas',     label: 'Canvas integrations',   note: 'Tools that plug into Canvas for grading, practice, and assessment', categories: ['quiz-proctoring', 'plagiarism', 'analytics', 'practice-content', 'engagement-canvas'] },
     { id: 'other',      label: 'Other teaching tools',  note: 'General-purpose tools some teachers use', categories: ['engagement-standalone'] },
     { id: 'operations', label: 'Operations',            note: 'Public website, athletics, and other institutional systems', categories: ['public-site', 'athletics'] },
     { id: 'infra',      label: 'Behind the scenes',     note: 'Infrastructure that runs the tools above — only matters if those go red too', categories: ['vendor-platform', 'infra'] }
@@ -1012,27 +1064,9 @@ const SECTIONS = {
 // builds a synthetic list: teaching sections + a final "Operations" section
 // containing any vendor whose category doesn't fit a teaching section.
 function getSectionsForAudience(audience) {
-  if (audience === 'teaching' || audience === 'operations') {
-    return SECTIONS[audience];
-  }
-  // 'all' (default for first-time visitors)
-  const teachingSections = SECTIONS.teaching;
-  const teachingCategories = new Set(teachingSections.flatMap(s => s.categories));
-
-  // Find categories that exist in VENDORS but aren't covered by any teaching section
-  const allCategories = new Set(VENDORS.map(v => v.category).filter(Boolean));
-  const operationsOnlyCategories = [...allCategories].filter(c => !teachingCategories.has(c));
-
-  // If there are any orphan categories, append an Operations catchall.
-  // Otherwise just use teaching sections as-is.
-  if (operationsOnlyCategories.length === 0) {
-    return teachingSections;
-  }
-  return [
-    ...teachingSections,
-    { id: 'operations-all', label: 'Operations', note: 'Public website, athletics, and other institutional systems',
-      categories: operationsOnlyCategories }
-  ];
+  // Two views: Teaching (classroom only) and Everything (all systems, incl.
+  // operations and behind-the-scenes infrastructure).
+  return audience === 'teaching' ? SECTIONS.teaching : SECTIONS.everything;
 }
 
 const VENDORS = [
@@ -2622,6 +2656,17 @@ function formatClockTime(date) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function statusGlyph(cls) {
+  const S = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">';
+  if (cls.indexOf('operational') >= 0) return S + '<polyline points="20 6 9 17 4 12"/></svg>';
+  if (cls.indexOf('major') >= 0)       return S + '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  if (cls.indexOf('partial') >= 0 || cls.indexOf('degraded') >= 0)
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  if (cls.indexOf('breakage') >= 0)
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>';
+}
+
 function renderTile(vendor, result) {
   const tile = document.createElement('div');
   tile.className = 'tile';
@@ -2646,7 +2691,7 @@ function renderTile(vendor, result) {
   const isBreakage = sev === 'breakage';
   const isUnknown = !result || result.error || sev === 'unknown';
 
-  const mode = (isInfra || isProblem || isBreakage || isUnknown || hasIncident || vendor.type === 'linkonly')
+  const mode = (isProblem || isBreakage || isUnknown || hasIncident || vendor.type === 'linkonly')
     ? 'full' : 'compact';
   tile.classList.add('is-' + mode);
 
@@ -2704,6 +2749,7 @@ function renderTile(vendor, result) {
         statusText.textContent = result.statusText || severityLabel(result.severity);
       }
     }
+    dot.innerHTML = statusGlyph(dot.className);
     statusRow.appendChild(dot);
     statusRow.appendChild(statusText);
 
@@ -3393,9 +3439,9 @@ const VALID_AUDIENCES = ['all', 'teaching', 'operations'];
 function getStoredAudience() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_AUDIENCE);
-    return VALID_AUDIENCES.includes(stored) ? stored : 'all';
+    return VALID_AUDIENCES.includes(stored) ? stored : 'teaching';
   } catch (_) {
-    return 'all';  // localStorage unavailable (private browsing, etc.)
+    return 'teaching';  // localStorage unavailable (private browsing, etc.)
   }
 }
 
