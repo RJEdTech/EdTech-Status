@@ -1762,7 +1762,12 @@ async function fetchStatuspage(vendor) {
   }
 
   const description = data.status?.description || severityLabel(mapStatuspageIndicator(indicator));
-  const updatedAt = data.page?.updated_at;
+  // "last checked"/staleness must reflect when WE fetched (happens on every
+  // page load), NOT the vendor's page.updated_at -- that is the last time the
+  // vendor edited their status page, which is old whenever they're healthy and
+  // made every quiet Statuspage tile read STALE. Incident update time is kept
+  // separately on incident.updatedAt below.
+  const updatedAt = new Date().toISOString();
 
   // Try to fetch unresolved incidents in parallel for richer display
   let incident = null;
