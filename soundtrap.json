@@ -1,7 +1,8 @@
 {
-  "fetchedAt": "2026-04-22T18:48:00Z",
+  "fetchedAt": "2026-08-14T01:33:07.084Z",
   "source": "https://status.soundtrap.com/",
   "status": "operational",
   "parseError": null,
-  "lastSuccessfulParse": "2026-04-22T18:48:00Z"
+  "fetchTrouble": null,
+  "lastSuccessfulParse": "2026-08-14T01:33:07.084Z"
 }
