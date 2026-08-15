@@ -1,7 +1,9 @@
-name: Fetch athletics probes
+name: Fetch reachability probes
 
-# Reachability probes for athletics tools that have NO public status page:
-# MaxPreps, Neptune GameTime, and ATGenius. Each is a server-side HTTP check
+# Reachability probes for tools that have NO public status page:
+# MaxPreps, Neptune GameTime, ATGenius, and Flint (the K-12 AI platform:
+# status.flintk12.com just 302-redirects to an app sign-in, so there is no
+# public status JSON to read). Each is a server-side HTTP check
 # (classified by response, not by scraping a banner), written to its own JSON
 # in the RJ Website / Arbiter "synthetic check" schema:
 #   severity ('operational' | 'degraded' | 'major') + statusLabel/statusDetail,
@@ -48,6 +50,7 @@ jobs:
             { name: 'MaxPreps',         url: 'https://www.maxpreps.com/', out: 'maxpreps.json' },
             { name: 'Neptune GameTime', url: 'https://neptunenow.com/',   out: 'neptune.json'  },
             { name: 'ATGenius',         url: 'https://atgenius.com/',     out: 'atgenius.json' },
+            { name: 'Flint',            url: 'https://app.flintk12.com/', out: 'flint.json', forbiddenIsUp: true },
           ];
 
           const ATTEMPTS      = 3;      // best-of, to dampen single-request runner blips
@@ -141,7 +144,16 @@ jobs:
               }
             }
             outcomes.sort((a, b) => outcomeRank(a) - outcomeRank(b));
-            const best = outcomes[0];
+            let best = outcomes[0];
+            // Flint (forbiddenIsUp) sits behind Cloudflare bot protection that
+            // answers datacenter requests with 401/403 even when it is fully up.
+            // That is the EDGE responding — proof of reachability, not a moved URL
+            // — so treat it as operational. A real outage still surfaces as a 5xx
+            // or a timeout (major), and a 404/410 still means the URL moved.
+            if (t.forbiddenIsUp && best.kind === 'probeError' && /HTTP (401|403)/.test(best.detail)) {
+              best = { kind: 'status', severity: 'operational', label: 'Reachable',
+                       detail: best.detail + ' (auth-gated edge)' };
+            }
             const now = new Date().toISOString();
 
             let newContent;
@@ -203,5 +215,5 @@ jobs:
       - name: Commit and report
         uses: ./.github/actions/commit-snapshot
         with:
-          files: maxpreps.json neptune.json atgenius.json
+          files: maxpreps.json neptune.json atgenius.json flint.json
           message: Update athletics probe snapshots
