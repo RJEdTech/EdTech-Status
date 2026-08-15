@@ -1166,16 +1166,18 @@ const VENDORS = [
     task: 'teach',
     category: 'ai-tutoring',
     name: 'Flint',
-    sub: 'flintk12.com',
+    sub: 'flintk12.com — synthetic reachability check',
     tier: 'core',
     audience: ['teaching'],
-    type: 'statuspage',
-    apiUrl: 'https://status.flintk12.com/api/v2/status.json',
-    summaryUrl: 'https://status.flintk12.com/api/v2/summary.json',
-    pageUrl: 'https://status.flintk12.com/',
+    // Flint has no public status page: status.flintk12.com 302-redirects to an
+    // app sign-in, so the old Statuspage fetch always failed and the tile stuck
+    // on "(cached)". Switched to a server-side reachability probe
+    // (fetch-athletics-probes.yml → flint.json), same as ATGenius/Neptune.
+    type: 'syntheticprobe',
+    apiUrl: 'flint.json',
+    pageUrl: 'https://app.flintk12.com/',
     whatItDoes: 'Our K-12 AI platform — Chats for teacher use, Activities for guided student-facing AI work.',
-    whenDown: 'Any in-progress student Activities pause; teachers can use other AI tools (Claude, ChatGPT) for their own work.',
-    extraLink: { label: 'Uptime history', url: 'https://status.flintk12.com/uptime' }
+    whenDown: 'Any in-progress student Activities pause; teachers can use other AI tools (Claude, ChatGPT) for their own work.'
   },
 
   // ============================================================
