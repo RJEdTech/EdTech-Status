@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-08-15T12:54:38.068Z",
+  "fetchedAt": "2026-08-15T13:55:43.972Z",
   "source": "https://noredinkstatus.com/",
   "severity": "operational",
   "banner": "All Systems Operational",
   "parseError": null,
   "fetchTrouble": null,
-  "lastSuccessfulParse": "2026-08-15T12:54:38.068Z"
+  "lastSuccessfulParse": "2026-08-15T13:55:43.972Z"
 }
