@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-08-16T14:26:42.171Z",
+  "checkedAt": "2026-08-16T14:50:22.120Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -22,7 +22,7 @@
     "maxpreps": "operational",
     "neptune": "operational",
     "atgenius": "operational",
-    "aws": "partial",
+    "aws": "operational",
     "cloudflare": "degraded"
   }
 }
