@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-08-16T15:35:26.953Z",
+  "fetchedAt": "2026-08-16T16:43:02.711Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
-  "severity": "operational",
-  "activeCount": 0,
-  "firstIncidentTitle": "",
+  "severity": "partial",
+  "activeCount": 1,
+  "firstIncidentTitle": "<![CDATA[Service impact: Increased Packet loss]]>",
   "parseError": null,
   "fetchTrouble": null,
-  "lastSuccessfulParse": "2026-08-16T15:35:26.953Z"
+  "lastSuccessfulParse": "2026-08-16T16:43:02.711Z"
 }
