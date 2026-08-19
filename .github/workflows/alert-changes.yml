@@ -50,7 +50,7 @@ jobs:
           const https = require('https');
 
           // ---------- Vendor configuration ----------
-          // Mirrors index.html's VENDORS array (24 tiles; m365 is link-only and
+          // Mirrors index.html's VENDORS array (25 tiles; m365 is link-only and
           // has no machine-readable signal, so it is deliberately absent here).
           // `tier` controls alert priority and infra-suppression.
           // `shape` tells the snapshot reader which field carries the state —
@@ -74,9 +74,14 @@ jobs:
             { id: 'vivi', name: 'Vivi', tier: 'core', kind: 'statuspage',
               url: 'https://status.vivi.io/api/v2/status.json',
               pageUrl: 'https://status.vivi.io/' },
-            { id: 'flint', name: 'Flint', tier: 'core', kind: 'statuspage',
-              url: 'https://status.flintk12.com/api/v2/status.json',
-              pageUrl: 'https://status.flintk12.com/' },
+            // Flint has no public status page — status.flintk12.com 302-redirects to
+            // an app sign-in. index.html was moved to the server-side reachability
+            // probe (fetch-athletics-probes.yml -> flint.json) back in August; this
+            // alerter was left pointing at the dead Statuspage URL, so it reported
+            // Flint as permanently 'breakage' while the dashboard showed it green.
+            { id: 'flint', name: 'Flint', tier: 'core', kind: 'snapshot', shape: 'severity',
+              file: 'flint.json',
+              pageUrl: 'https://app.flintk12.com/' },
             { id: 'respondus', name: 'LockDown Browser', tier: 'core', kind: 'statuspage',
               url: 'https://status.respondus.com/api/v2/status.json',
               pageUrl: 'https://status.respondus.com/' },
@@ -112,6 +117,9 @@ jobs:
             { id: 'soundtrap', name: 'Soundtrap', tier: 'secondary', kind: 'snapshot', shape: 'status',
               file: 'soundtrap.json',
               pageUrl: 'https://status.soundtrap.com/' },
+            { id: 'canva', name: 'Canva', tier: 'secondary', kind: 'statuspage',
+              url: 'https://www.canvastatus.com/api/v2/status.json',
+              pageUrl: 'https://www.canvastatus.com/' },
             { id: 'noredink', name: 'NoRedInk', tier: 'secondary', kind: 'snapshot', shape: 'noredink',
               file: 'noredink.json',
               pageUrl: 'https://noredinkstatus.com/' },
@@ -151,21 +159,60 @@ jobs:
           const STATE_PATH = 'state/last-status.json';
           const SEVERITY_RANK = { operational: 0, degraded: 1, partial: 2, major: 3, breakage: 4, unknown: -1 };
 
+          // ---------- Crash guards ----------
+          // Node kills the process with exit code 1 on an uncaught exception or an
+          // unhandled rejection. A response stream that errors after we have walked
+          // away from it (non-200, socket reset mid-body) emits 'error' with no
+          // listener and does exactly that — which is how this job went red with a
+          // bare "Process completed with exit code 1" and no explanation.
+          //
+          // Two rules: (a) always print what actually happened, and (b) a stray
+          // network error AFTER the alerting work is done is not a failure — the
+          // alert already went out (or there was nothing to send), so warn and exit
+          // clean rather than reporting a false red.
+          let workComplete = false;
+          function handleStray(kind, err) {
+            const detail = (err && err.stack) || String(err);
+            if (workComplete) {
+              console.log(`::warning::Ignoring late ${kind} after alerting finished: ${detail}`);
+              return;
+            }
+            console.error(`::error::${kind}: ${detail}`);
+            process.exit(1);
+          }
+          process.on('uncaughtException', (e) => handleStray('uncaughtException', e));
+          process.on('unhandledRejection', (e) => handleStray('unhandledRejection', e));
+
           // ---------- HTTP helper ----------
+          // Every response gets an 'error' listener, non-200 bodies are drained
+          // instead of abandoned, and every request has a hard timeout so a hung
+          // vendor endpoint can't stall the run.
+          const HTTP_TIMEOUT_MS = 12000;
+
           function fetchJson(url) {
             return new Promise((resolve, reject) => {
-              https.get(url, { headers: { 'User-Agent': 'rj-edtech-status-alerter' } }, (res) => {
+              const req = https.get(url, {
+                headers: { 'User-Agent': 'rj-edtech-status-alerter' },
+                timeout: HTTP_TIMEOUT_MS,
+              }, (res) => {
+                res.on('error', (e) => reject(new Error(`stream error for ${url}: ${e.message}`)));
+
                 if (res.statusCode !== 200) {
+                  res.resume();  // drain, so the socket closes cleanly instead of erroring later
                   reject(new Error(`HTTP ${res.statusCode} for ${url}`));
                   return;
                 }
+
                 let body = '';
+                res.setEncoding('utf8');
                 res.on('data', (c) => body += c);
                 res.on('end', () => {
                   try { resolve(JSON.parse(body)); }
                   catch (e) { reject(new Error(`JSON parse failed for ${url}: ${e.message}`)); }
                 });
-              }).on('error', reject);
+              });
+              req.on('timeout', () => req.destroy(new Error(`timed out after ${HTTP_TIMEOUT_MS}ms: ${url}`)));
+              req.on('error', reject);
             });
           }
 
@@ -175,20 +222,25 @@ jobs:
               const u = new URL(url);
               const req = https.request({
                 hostname: u.hostname,
+                port: u.port || 443,
                 path: u.pathname + u.search,
                 method: 'POST',
+                timeout: HTTP_TIMEOUT_MS,
                 headers: {
                   'Content-Type': 'application/json',
                   'Content-Length': Buffer.byteLength(data),
                 },
               }, (res) => {
+                res.on('error', (e) => reject(new Error(`Teams webhook stream error: ${e.message}`)));
                 let body = '';
+                res.setEncoding('utf8');
                 res.on('data', (c) => body += c);
                 res.on('end', () => {
                   if (res.statusCode >= 200 && res.statusCode < 300) resolve(body);
                   else reject(new Error(`Teams webhook returned HTTP ${res.statusCode}: ${body}`));
                 });
               });
+              req.on('timeout', () => req.destroy(new Error(`Teams webhook timed out after ${HTTP_TIMEOUT_MS}ms`)));
               req.on('error', reject);
               req.write(data);
               req.end();
@@ -304,6 +356,10 @@ jobs:
               VENDORS.map(async (v) => ({ vendor: v, severity: await getCurrentSeverity(v) }))
             );
 
+            // One line per vendor, so the log always shows what was read even when
+            // nothing changed — the previous version printed nothing on a quiet run.
+            console.log(results.map((r) => `  ${r.vendor.id}: ${r.severity}`).join('\n'));
+
             // Build current state
             const currentState = {
               checkedAt: new Date().toISOString(),
@@ -345,11 +401,13 @@ jobs:
 
             if (isFirstRun) {
               console.log(`First run — wrote baseline for ${VENDORS.length} vendors. No alerts sent.`);
+              workComplete = true;
               process.exit(0);
             }
 
             if (filteredChanges.length === 0) {
               console.log('No actionable status changes.');
+              workComplete = true;
               process.exit(0);
             }
 
@@ -420,8 +478,9 @@ jobs:
 
             await postJson(webhook, payload);
             console.log(`Posted ${filteredChanges.length} change(s) to Teams.`);
+            workComplete = true;
           })().catch((e) => {
-            console.error('Workflow failed:', e);
+            console.error(`::error::Alerter failed: ${(e && e.stack) || e}`);
             process.exit(1);
           });
           EOF
