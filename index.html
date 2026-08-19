@@ -1269,6 +1269,31 @@ const VENDORS = [
     pageUrl: 'https://status.soundtrap.com/',
     whatItDoes: 'Browser-based music creation and podcast recording — used in music and language classes.',
     whenDown: 'New recording and editing pauses; saved projects remain in students\' accounts.'},
+  // Canva for Education (Atlassian Statuspage v2 with a public CORS-enabled API,
+  // so we fetch it directly in the browser — no GitHub Action needed. Same code
+  // path as Canvas, DeltaMath, AspirEDU, Cloudflare, etc.)
+  //
+  // Note: Canva's status page carries a dedicated "Canvas" component alongside
+  // "Login and signup" and "Editing designs". The top-level indicator we read
+  // here fires when ANY component is degraded, which is what we want — an LTI
+  // failure and an editor failure both stop a teacher's lesson. If we ever want
+  // to distinguish them, switch to summary.json and filter on the "Canvas",
+  // "Apps and Integrations", and "Login and signup" components.
+  {
+    id: 'canva',
+    task: 'canvas',
+    category: 'engagement-canvas',
+    name: 'Canva',
+    sub: 'Canva for Education — design & Canvas LTI',
+    tier: 'secondary',
+    audience: ['teaching'],
+    type: 'statuspage',
+    apiUrl: 'https://www.canvastatus.com/api/v2/status.json',
+    summaryUrl: 'https://www.canvastatus.com/api/v2/summary.json',
+    pageUrl: 'https://www.canvastatus.com/',
+    whatItDoes: 'Design and presentation tool used for student projects, posters, infographics, and slides. Integrated with Canvas, so teachers can assign Canva work and students submit it back through the LMS.',
+    whenDown: 'Students can\'t open, edit, or submit Canva work; the Canvas integration may fail to hand off or return an assignment even when the rest of Canvas is healthy. Existing designs are safe — they resume when Canva recovers.',
+    extraLink: { label: 'Uptime history', url: 'https://www.canvastatus.com/uptime' }},
   // NoRedInk (status page hosted on Status.io, scraped to noredink.json by
   // GitHub Actions. Replaces the previous StatusGator link-only tile now that
   // we have live parsing of the vendor's own status page.)
