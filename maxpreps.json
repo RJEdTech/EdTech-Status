@@ -1,8 +1,11 @@
 {
-  "fetchedAt": "2026-08-19T13:05:40.671Z",
+  "fetchedAt": "2026-08-19T14:00:36.463Z",
   "severity": "operational",
   "statusLabel": "Reachable",
-  "statusDetail": "HTTP 200",
-  "parseError": null,
+  "statusDetail": "HTTP 406",
+  "parseError": {
+    "message": "MaxPreps probe returned HTTP 406 — https://www.maxpreps.com/ may have moved. Update the target in fetch-athletics-probes.yml.",
+    "firstFailedAt": "2026-08-19T14:00:36.463Z"
+  },
   "lastSuccessfulParse": "2026-08-09T21:36:24.343Z"
 }
