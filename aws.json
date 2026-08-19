@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-08-19T14:50:51.484Z",
+  "fetchedAt": "2026-08-19T15:21:52.305Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
-  "severity": "operational",
-  "activeCount": 0,
-  "firstIncidentTitle": "",
+  "severity": "partial",
+  "activeCount": 1,
+  "firstIncidentTitle": "<![CDATA[Service impact: Increased Error Rates]]>",
   "parseError": null,
   "fetchTrouble": null,
-  "lastSuccessfulParse": "2026-08-19T14:50:51.484Z"
+  "lastSuccessfulParse": "2026-08-19T15:21:52.305Z"
 }
