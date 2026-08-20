@@ -1,7 +1,8 @@
 name: Fetch reachability probes
 
 # Reachability probes for tools that have NO public status page:
-# MaxPreps, Neptune GameTime, ATGenius, and Flint (the K-12 AI platform:
+# MaxPreps, Neptune GameTime, ATGenius, Swank Digital Campus, and Flint
+# (the K-12 AI platform:
 # status.flintk12.com just 302-redirects to an app sign-in, so there is no
 # public status JSON to read). Each is a server-side HTTP check
 # (classified by response, not by scraping a banner), written to its own JSON
@@ -9,7 +10,7 @@ name: Fetch reachability probes
 #   severity ('operational' | 'degraded' | 'major') + statusLabel/statusDetail,
 #   with parseError when OUR probe target moved (a stale-URL 4xx).
 #
-# All three are simple single-URL GETs, so they share one workflow: probed
+# All of them are simple single-URL GETs, so they share one workflow: probed
 # sequentially and committed in a single push (no cross-workflow push races,
 # less Actions noise). Limitation, same as the rest of the dashboard: this
 # runs from GitHub's runners, so it catches vendor-side outages, not an
@@ -51,6 +52,14 @@ jobs:
             { name: 'Neptune GameTime', url: 'https://neptunenow.com/',   out: 'neptune.json'  },
             { name: 'ATGenius',         url: 'https://atgenius.com/',     out: 'atgenius.json' },
             { name: 'Flint',            url: 'https://app.flintk12.com/', out: 'flint.json', forbiddenIsUp: true },
+            // Swank Digital Campus — licensed film streaming. No status page of
+            // any kind (incidents are Zendesk help-centre articles), so this is the
+            // only signal we can get. Probes RJ's OWN tenant login URL, not the
+            // swankmp.net root, so an account-specific breakage shows up too.
+            // Correct student/teacher path is /rjhs406365/login; /admin/... is the
+            // staff console. forbiddenIsUp because Swank's edge serves a
+            // blanket-deny robots.txt and may 401/403 datacenter IPs.
+            { name: 'Swank',            url: 'https://digitalcampus.swankmp.net/rjhs406365/login?returnUrl=%2FRJHS406365', out: 'swank.json', forbiddenIsUp: true },
           ];
 
           const ATTEMPTS      = 3;      // best-of, to dampen single-request runner blips
@@ -145,8 +154,8 @@ jobs:
             }
             outcomes.sort((a, b) => outcomeRank(a) - outcomeRank(b));
             let best = outcomes[0];
-            // Flint (forbiddenIsUp) sits behind Cloudflare bot protection that
-            // answers datacenter requests with 401/403 even when it is fully up.
+            // Flint and Swank (forbiddenIsUp) sit behind bot protection that
+            // can answer datacenter requests with 401/403 even when fully up.
             // That is the EDGE responding — proof of reachability, not a moved URL
             // — so treat it as operational. A real outage still surfaces as a 5xx
             // or a timeout (major), and a 404/410 still means the URL moved.
@@ -215,5 +224,5 @@ jobs:
       - name: Commit and report
         uses: ./.github/actions/commit-snapshot
         with:
-          files: maxpreps.json neptune.json atgenius.json flint.json
+          files: maxpreps.json neptune.json atgenius.json flint.json swank.json
           message: Update athletics probe snapshots

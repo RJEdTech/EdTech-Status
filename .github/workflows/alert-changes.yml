@@ -50,7 +50,7 @@ jobs:
           const https = require('https');
 
           // ---------- Vendor configuration ----------
-          // Mirrors index.html's VENDORS array (25 tiles; m365 is link-only and
+          // Mirrors index.html's VENDORS array (26 tiles; m365 is link-only and
           // has no machine-readable signal, so it is deliberately absent here).
           // `tier` controls alert priority and infra-suppression.
           // `shape` tells the snapshot reader which field carries the state —
@@ -135,6 +135,13 @@ jobs:
             { id: 'atgenius', name: 'ATGenius', tier: 'secondary', kind: 'snapshot', shape: 'severity',
               file: 'atgenius.json',
               pageUrl: 'https://atgenius.com/' },
+
+            // Swank Digital Campus — licensed film streaming. Reachability probe
+            // only; Swank publishes no status feed (incidents are Zendesk articles).
+            // Same snapshot/severity shape as the other probes.
+            { id: 'swank', name: 'Swank Digital Campus', tier: 'secondary', kind: 'snapshot', shape: 'severity',
+              file: 'swank.json',
+              pageUrl: 'https://digitalcampus.swankmp.net/rjhs406365/login?returnUrl=%2FRJHS406365' },
 
             // ---- INFRASTRUCTURE ----
             { id: 'aws', name: 'AWS', tier: 'infra', kind: 'snapshot', shape: 'severity',
