@@ -1181,7 +1181,7 @@ const VENDORS = [
   },
 
   // ============================================================
-  // SECONDARY (9) — Canvas integrations and side tools
+  // SECONDARY (10) — Canvas integrations and side tools
   // ============================================================
   {
     id: 'respondus',
@@ -1328,6 +1328,44 @@ const VENDORS = [
     pageUrl: 'https://status.deltamath.com/',
     whatItDoes: 'Math practice with detailed step-by-step feedback and adaptive difficulty.',
     whenDown: 'Students can\'t complete assignments; teacher gradebooks may not sync until restored.'},
+
+  // Swank Digital Campus — licensed feature-film streaming for classroom use.
+  // There is NO machine-readable status source anywhere: Swank publishes
+  // incidents and maintenance as articles in a Zendesk help-centre section
+  // ("Swank Service Updates"), which is an announcement log, not a live feed —
+  // the most recent entries are months apart. So this is a server-side
+  // reachability probe (fetch-athletics-probes.yml -> swank.json), the same
+  // pattern as Flint / MaxPreps / ATGenius.
+  //
+  // Probe target is RJ's OWN tenant login URL rather than the swankmp.net
+  // root, so an outage specific to our account surfaces here too. Note the
+  // path: teachers and students land on /rjhs406365/login — the
+  // /admin/rjhs406365/login form is the staff admin console and is not the
+  // URL to hand out.
+  //
+  // The probe carries forbiddenIsUp: Swank's edge serves a blanket-deny
+  // robots.txt and may answer datacenter IPs with 401/403. The edge answering
+  // at all is proof of reachability, so that is reclassified as operational —
+  // identical to the Flint case. A real outage still shows as 5xx or timeout
+  // (major); a 404/410 still means our URL moved.
+  //
+  // This is the first tile in the "Other teaching tools" section; that section
+  // was declared in SECTIONS but had no vendors, so it did not render until now.
+  {
+    id: 'swank',
+    task: 'teach',
+    category: 'engagement-standalone',
+    name: 'Swank Digital Campus',
+    sub: 'Licensed film streaming — synthetic reachability check',
+    tier: 'secondary',
+    audience: ['teaching'],
+    type: 'syntheticprobe',
+    apiUrl: 'swank.json',
+    pageUrl: 'https://digitalcampus.swankmp.net/rjhs406365/login?returnUrl=%2FRJHS406365',
+    whatItDoes: 'Streams licensed feature films and documentaries for classroom showings and assigned viewing, with public-performance rights included.',
+    whenDown: 'A planned screening won\'t play — the teacher needs a fallback for the period or reschedules the showing. Nothing else is affected: Canvas, grades, and coursework keep working.',
+    extraLink: { label: 'Swank service updates', url: 'https://swankmp.zendesk.com/hc/en-us/sections/23299581513876-Swank-Service-Updates' }
+  },
 
   // ============================================================
   // INFRASTRUCTURE (2) — platforms our tools depend on
