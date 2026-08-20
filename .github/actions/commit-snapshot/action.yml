@@ -50,9 +50,18 @@ runs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        if git diff --quiet -- $FILES; then
+        # `git diff` only reports TRACKED files, so a snapshot file that does not
+        # exist on main yet — the first run after a new vendor is added — looks
+        # identical to "nothing changed" and the run exits green having committed
+        # nothing, forever. Ask about untracked files too. (This is why Swank's
+        # first probe ran clean four times without ever publishing swank.json.)
+        UNTRACKED="$(git ls-files --others --exclude-standard -- $FILES)"
+        if git diff --quiet -- $FILES && [ -z "$UNTRACKED" ]; then
           echo "No changes to commit."
           exit 0
+        fi
+        if [ -n "$UNTRACKED" ]; then
+          echo "New snapshot file(s) not yet on main:$(echo " $UNTRACKED" | tr '\n' ' ')"
         fi
 
         # Stash our versions outside the work tree so we can re-apply them after
