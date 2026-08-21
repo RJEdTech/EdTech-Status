@@ -50,7 +50,7 @@ jobs:
           const https = require('https');
 
           // ---------- Vendor configuration ----------
-          // Mirrors index.html's VENDORS array (26 tiles; m365 is link-only and
+          // Mirrors index.html's VENDORS array (27 tiles; m365 is link-only and
           // has no machine-readable signal, so it is deliberately absent here).
           // `tier` controls alert priority and infra-suppression.
           // `shape` tells the snapshot reader which field carries the state —
@@ -142,6 +142,13 @@ jobs:
             { id: 'swank', name: 'Swank Digital Campus', tier: 'secondary', kind: 'snapshot', shape: 'severity',
               file: 'swank.json',
               pageUrl: 'https://digitalcampus.swankmp.net/rjhs406365/login?returnUrl=%2FRJHS406365' },
+
+            // Project STEM (formerly Edhesive) — the AP CS course platform.
+            // Reachability probe only; Project STEM publishes no status feed of
+            // any kind. Same snapshot/severity shape as the other probes.
+            { id: 'projectstem', name: 'Project STEM', tier: 'secondary', kind: 'snapshot', shape: 'severity',
+              file: 'projectstem.json',
+              pageUrl: 'https://projectstem.org/users/sign_in' },
 
             // ---- INFRASTRUCTURE ----
             { id: 'aws', name: 'AWS', tier: 'infra', kind: 'snapshot', shape: 'severity',

@@ -1,8 +1,8 @@
 name: Fetch reachability probes
 
 # Reachability probes for tools that have NO public status page:
-# MaxPreps, Neptune GameTime, ATGenius, Swank Digital Campus, and Flint
-# (the K-12 AI platform:
+# MaxPreps, Neptune GameTime, ATGenius, Swank Digital Campus, Project STEM,
+# and Flint (the K-12 AI platform:
 # status.flintk12.com just 302-redirects to an app sign-in, so there is no
 # public status JSON to read). Each is a server-side HTTP check
 # (classified by response, not by scraping a banner), written to its own JSON
@@ -60,6 +60,18 @@ jobs:
             // staff console. forbiddenIsUp because Swank's edge serves a
             // blanket-deny robots.txt and may 401/403 datacenter IPs.
             { name: 'Swank',            url: 'https://digitalcampus.swankmp.net/rjhs406365/login?returnUrl=%2FRJHS406365', out: 'swank.json', forbiddenIsUp: true },
+            // Project STEM (formerly Edhesive) — the course platform AP CSP and
+            // AP CSA run on. No status page of any kind: no Atlassian Statuspage,
+            // no StatusGator service, no help-centre incident feed. Support is an
+            // email address and a JotForm. So, as with Swank, reachability of the
+            // sign-in gate is the only real-time signal there is.
+            //
+            // Probe target is the sign-in page teachers and students actually
+            // land on, not the marketing root, so a broken auth gate surfaces
+            // even while the brochure site is fine. forbiddenIsUp because the
+            // platform is robots-restricted (courses.projectstem.org refuses
+            // crawlers outright) and may answer datacenter IPs with 401/403.
+            { name: 'Project STEM',     url: 'https://projectstem.org/users/sign_in', out: 'projectstem.json', forbiddenIsUp: true },
           ];
 
           const ATTEMPTS      = 3;      // best-of, to dampen single-request runner blips
@@ -224,5 +236,5 @@ jobs:
       - name: Commit and report
         uses: ./.github/actions/commit-snapshot
         with:
-          files: maxpreps.json neptune.json atgenius.json flint.json swank.json
+          files: maxpreps.json neptune.json atgenius.json flint.json swank.json projectstem.json
           message: Update athletics probe snapshots
