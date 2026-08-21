@@ -1181,7 +1181,7 @@ const VENDORS = [
   },
 
   // ============================================================
-  // SECONDARY (10) — Canvas integrations and side tools
+  // SECONDARY (11) — Canvas integrations and side tools
   // ============================================================
   {
     id: 'respondus',
@@ -1365,6 +1365,42 @@ const VENDORS = [
     whatItDoes: 'Streams licensed feature films and documentaries for classroom showings and assigned viewing, with public-performance rights included.',
     whenDown: 'A planned screening won\'t play — the teacher needs a fallback for the period or reschedules the showing. Nothing else is affected: Canvas, grades, and coursework keep working.',
     extraLink: { label: 'Swank service updates', url: 'https://swankmp.zendesk.com/hc/en-us/sections/23299581513876-Swank-Service-Updates' }
+  },
+
+  // Project STEM (formerly Edhesive) — the platform RJ's computer science
+  // courses run on: AP Computer Science Principles and AP Computer Science A
+  // live here, so when it is down a CS class has no coursework, no code
+  // editor, and no autograder. That makes it a first-order classroom tool
+  // despite sitting in the "other tools" section.
+  //
+  // Like Swank, there is NO machine-readable status source: no Atlassian
+  // Statuspage (status.projectstem.org does not exist), no StatusGator
+  // service, no help-centre incident feed. Support is info@projectstem.org
+  // and a JotForm. So this is a server-side reachability probe
+  // (fetch-athletics-probes.yml -> projectstem.json), the same pattern as
+  // Flint / Swank / MaxPreps / ATGenius.
+  //
+  // Probe target is the sign-in page teachers and students actually land on
+  // (/users/sign_in), not the marketing root, so a broken auth gate shows up
+  // here even when the brochure site is serving fine. forbiddenIsUp is set on
+  // the probe: the platform is robots-restricted and may answer datacenter
+  // IPs with 401/403, which is the edge responding and therefore proof of
+  // reachability. A real outage still reads as 5xx or timeout (major); a
+  // 404/410 still means our URL moved.
+  {
+    id: 'projectstem',
+    task: 'teach',
+    category: 'engagement-standalone',
+    name: 'Project STEM',
+    sub: 'AP CS coursework — synthetic reachability check',
+    tier: 'secondary',
+    audience: ['teaching'],
+    type: 'syntheticprobe',
+    apiUrl: 'projectstem.json',
+    pageUrl: 'https://projectstem.org/users/sign_in',
+    whatItDoes: 'Hosts the computer science curriculum — AP Computer Science Principles and AP Computer Science A — including lessons, the in-browser code editor, assignments, and automatic grading.',
+    whenDown: 'CS classes lose the lesson, the code editor, and the autograder all at once, so there is no coursework to fall back on — plan an unplugged activity for the period. Nothing outside CS is affected.',
+    extraLink: { label: 'Project STEM support', url: 'https://projectstem.org/contactus' }
   },
 
   // ============================================================
