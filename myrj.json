@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-08-22T20:32:27.869Z",
+  "fetchedAt": "2026-08-22T21:49:48.486Z",
   "source": "synthetic-check",
   "target": "https://regisjesuit.myschoolapp.com/app/faculty?svcid=edu",
   "severity": "operational",
   "statusLabel": "Operating normally",
   "statusDetail": null,
   "parseError": null,
-  "lastSuccessfulParse": "2026-08-22T20:32:27.869Z"
+  "lastSuccessfulParse": "2026-08-22T21:49:48.486Z"
 }
