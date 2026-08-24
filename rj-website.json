@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-08-23T22:53:09.862Z",
+  "fetchedAt": "2026-08-24T00:01:43.508Z",
   "source": "synthetic-check",
   "target": "https://www.regisjesuit.com/",
   "severity": "operational",
   "statusLabel": "Operating normally",
   "statusDetail": null,
   "parseError": null,
-  "lastSuccessfulParse": "2026-08-23T22:53:09.862Z"
+  "lastSuccessfulParse": "2026-08-24T00:01:43.508Z"
 }
