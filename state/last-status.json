@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-08-24T14:10:16.721Z",
+  "checkedAt": "2026-08-24T15:03:42.760Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "operational",
+    "blackbaud": "breakage",
     "myrj": "operational",
     "vivi": "operational",
     "flint": "operational",
@@ -17,7 +17,7 @@
     "explorelearning": "operational",
     "gimkit": "operational",
     "soundtrap": "operational",
-    "canva": "operational",
+    "canva": "breakage",
     "noredink": "operational",
     "arbitersports": "operational",
     "maxpreps": "operational",
