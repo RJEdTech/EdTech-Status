@@ -1,96 +1,98 @@
 'use strict';
 
 /**
- * NoRedInk — hosted on Status.io. Like most third-party status page platforms,
- * Status.io does not expose a public unauthenticated JSON endpoint for customer
- * pages (their /v2/ API requires an API key per customer), so we scrape the
- * rendered HTML.
+ * NoRedInk — hosted on Status.io.
+ *
+ * 2026-08-25: this module used to scrape the rendered banner out of
+ * id="statusbar_text", on the stated belief that "Status.io does not expose a
+ * public unauthenticated JSON endpoint for customer pages". That is not true.
+ * Status.io publishes a documented, public, key-free read endpoint:
+ *
+ *   GET https://api.status.io/1.0/status/<statuspage_id>
+ *
+ * NoRedInk's page id (63b60949f1c65f058ac51bd2) is in their status page's own
+ * markup. The response carries result.status_overall.status_code — Status.io's
+ * numeric status vocabulary — which is what the page itself renders from.
+ *
+ * So we read the number, not the sentence. This is the same lesson the Gimkit
+ * scraper learned the hard way on 2026-08-24: a vendor rewriting a line of copy
+ * should never look like a broken status check.
+ *
+ * The old text patterns are gone rather than kept as a fallback: they matched
+ * against a different URL (the HTML page), and snapshot-lib fetches exactly one
+ * URL per vendor. If the API ever stops answering, that surfaces honestly —
+ * a 5xx as a transient blip, a 404 as breakage.
  */
 
 const { BreakageError } = require('../snapshot-lib');
 
+// The human-facing page. Written into the snapshot as `source` and linked from
+// the dashboard; not the URL we read.
 const PAGE_URL = 'https://noredinkstatus.com/';
 
+// Status.io's id for NoRedInk's page. If NoRedInk ever migrates off Status.io
+// this id stops resolving, the API 404s, and snapshot-lib reports breakage on
+// the first run — which is the correct and honest outcome.
+const STATUS_PAGE_ID = '63b60949f1c65f058ac51bd2';
+const API_URL = 'https://api.status.io/1.0/status/' + STATUS_PAGE_ID;
+
 /**
- * Status.io renders a top banner with id="statusbar_text" containing the overall
- * page status in plain text. Known states (based on Status.io's documented
- * status levels):
- *
- *   "All Systems Operational"         -> operational (green)
- *   "Scheduled Maintenance"           -> maintenance (blue)
- *   "Degraded Performance"            -> degraded/partial (yellow/orange)
- *   "Partial System Outage"           -> partial (orange)
- *   "Major System Outage"             -> major (red)
- *   "Service Disruption"              -> partial (orange, conservative)
- *
- * We confirm we are on the right page by looking for the statusbar_text id
- * (generic across Status.io pages) AND a NoRedInk-specific marker. If the id is
- * gone, Status.io has changed their structure; if NoRedInk-specific markers are
- * gone, the URL probably redirected somewhere else. Either way the page is not
- * recognisable, so we raise BreakageError rather than guess.
- *
- * We intentionally do NOT look at background color hex codes for status
- * detection even though they're present in the HTML. Status.io lets customers
- * customize their color theme, and NoRedInk's green happens to be #27AE60
- * today — but if they ever rebrand, color matching silently breaks. Text
- * matching is more stable.
- *
- * Note on maintenance: the stats widget may show "1 Upcoming Maintenances"
- * while the overall banner still reads "All Systems Operational" — that's a
- * scheduled future window, not an active one. We only surface maintenance
- * severity when the banner itself says so.
+ * Status.io's documented status codes, mapped to the severities this repo uses.
+ * The dashboard's own mapping is unchanged: it still reads `severity` and
+ * `banner` out of noredink.json exactly as before.
  */
-function detect(html) {
-  // First, confirm we're on a Status.io page
-  const hasStatusbarId = /id=["']statusbar_text["']/i.test(html);
-  if (!hasStatusbarId) {
-    throw new BreakageError('No id="statusbar_text" found — Status.io may have redesigned the page structure.');
+const SEVERITY_BY_CODE = {
+  100: 'operational', // Operational
+  200: 'maintenance', // Scheduled Maintenance
+  300: 'degraded',    // Degraded Performance
+  400: 'partial',     // Partial Service Disruption
+  500: 'partial',     // Service Disruption   (the old scraper also called this partial)
+  600: 'partial',     // Security Event       (serious, but not a severity we model)
+};
+
+function detect(body) {
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch (err) {
+    throw new BreakageError('Status.io did not return JSON — the API endpoint or the page id has probably changed.');
   }
 
-  // Confirm we're on NoRedInk's page specifically (not a redirect)
-  const looksLikeNoRedInk = /NoRedInk/i.test(html) || /noredink\.com/i.test(html);
-  if (!looksLikeNoRedInk) {
-    throw new BreakageError('Status.io page loaded but no NoRedInk markers found — possible redirect.');
+  const overall = payload && payload.result && payload.result.status_overall;
+  if (!overall || typeof overall !== 'object') {
+    throw new BreakageError('Status.io response carried no result.status_overall — the API shape has changed.');
   }
 
-  // Extract the banner text
-  const bannerMatch = html.match(/id=["']statusbar_text["'][^>]*>([^<]+)</i);
-  if (!bannerMatch) {
-    throw new BreakageError('Found statusbar_text id but could not extract banner text — HTML structure changed.');
-  }
-  const bannerText = bannerMatch[1].trim();
+  const banner = typeof overall.status === 'string' ? overall.status.trim() : '';
+  const code = Number(overall.status_code);
+  const severity = SEVERITY_BY_CODE[code];
 
-  // Map banner text to severity. Check most severe first.
-  if (/major.*outage/i.test(bannerText))               return { severity: 'major',       banner: bannerText };
-  if (/partial.*outage/i.test(bannerText))             return { severity: 'partial',     banner: bannerText };
-  if (/service.*disruption/i.test(bannerText))         return { severity: 'partial',     banner: bannerText };
-  if (/degraded.*performance/i.test(bannerText))       return { severity: 'degraded',    banner: bannerText };
-  if (/scheduled.*maintenance/i.test(bannerText))      return { severity: 'maintenance', banner: bannerText };
-  if (/all.*systems.*operational/i.test(bannerText))   return { severity: 'operational', banner: bannerText };
+  if (severity) return { severity: severity, banner: banner };
 
-  // Banner present but text doesn't match any known state. Could be a state we
-  // haven't seen before (Status.io supports custom status labels) or a new
-  // wording. This is a reading of the page, not a failure to recognise it, so
-  // it is NOT breakage: surface as check_page and capture the banner text in the
-  // JSON so the keyword list can be updated quickly.
-  return { severity: 'check_page', banner: bannerText };
+  // A status code outside the documented set. This is a successful READING of a
+  // page we still understand — not a failure to recognise it — so it is not
+  // breakage. Surface it as check_page and carry the label through, exactly as
+  // the old scraper did with an unrecognised banner sentence.
+  return {
+    severity: 'check_page',
+    banner: banner || ('Status.io status code ' + (Number.isFinite(code) ? code : 'missing')),
+  };
 }
 
 module.exports = {
   label: 'NoRedInk',
   outPath: 'noredink.json',
-  url: PAGE_URL,
+  url: API_URL,
   static: { source: PAGE_URL },
   // Key order here fixes the field order in noredink.json:
   // fetchedAt, source, severity, banner, parseError, [fetchTrouble], lastSuccessfulParse.
-  // `banner` defaults to '' (not null) to match the old failure path's
-  // `lastGood.banner || ''`.
   defaults: { severity: 'unknown', banner: '' },
   fetch: {
-    accept: 'text/html',
-    // A redirect off this domain means the status page moved or was retired;
-    // parsing whatever we land on would produce a confident, wrong reading.
-    allowedHost: 'noredinkstatus.com',
+    accept: 'application/json',
+    // The API lives on api.status.io. A redirect off status.io means the
+    // endpoint moved or was retired; parsing whatever we land on would produce a
+    // confident, wrong reading.
+    allowedHost: 'status.io',
   },
   detect,
 };
