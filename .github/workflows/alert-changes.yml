@@ -50,7 +50,7 @@ jobs:
           const https = require('https');
 
           // ---------- Vendor configuration ----------
-          // Mirrors index.html's VENDORS array (27 tiles; m365 is link-only and
+          // Mirrors index.html's VENDORS array (29 tiles; m365 is link-only and
           // has no machine-readable signal, so it is deliberately absent here).
           // `tier` controls alert priority and infra-suppression.
           // `shape` tells the snapshot reader which field carries the state —
@@ -123,6 +123,12 @@ jobs:
             { id: 'noredink', name: 'NoRedInk', tier: 'secondary', kind: 'snapshot', shape: 'noredink',
               file: 'noredink.json',
               pageUrl: 'https://noredinkstatus.com/' },
+            { id: 'vhlcentral', name: 'VHL Central', tier: 'secondary', kind: 'snapshot', shape: 'severity',
+              file: 'vhlcentral.json',
+              pageUrl: 'https://www.vhlcentral.com/' },
+            { id: 'kwlhub', name: 'The KWL Hub', tier: 'secondary', kind: 'snapshot', shape: 'severity',
+              file: 'kwlhub.json',
+              pageUrl: 'https://thekwlhub.com/' },
             { id: 'arbitersports', name: 'ArbiterSports', tier: 'secondary', kind: 'snapshot', shape: 'severity',
               file: 'arbitersports.json',
               pageUrl: 'https://www1.arbitersports.com/ArbiterGame/Schedule' },
