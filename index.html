@@ -1181,7 +1181,7 @@ const VENDORS = [
   },
 
   // ============================================================
-  // SECONDARY (11) — Canvas integrations and side tools
+  // SECONDARY (13) — Canvas integrations and side tools
   // ============================================================
   {
     id: 'respondus',
@@ -1310,6 +1310,49 @@ const VENDORS = [
     pageUrl: 'https://noredinkstatus.com/',
     whatItDoes: 'Adaptive grammar and writing practice. Used heavily in English classes.',
     whenDown: 'Practice sets can\'t be completed; teacher dashboards may not refresh.'},
+  // VHL Central (Vista Higher Learning — Spanish). No status source of any kind:
+  // status.vhlcentral.com resolves but answers HTTP 402 (a lapsed status-page
+  // subscription), there is no StatusGator monitor, and support.vhlcentral.com is
+  // a Zendesk help centre with no incident feed. So this is a reachability probe
+  // (fetch-athletics-probes.yml -> vhlcentral.json) against the public LTI JWKS
+  // endpoint at /lti/keys — the URL Canvas itself fetches to validate a launch,
+  // which makes it a closer proxy for "can a student open VHL from Canvas?" than
+  // the marketing root would be.
+  {
+    id: 'vhlcentral',
+    task: 'canvas',
+    category: 'practice-content',
+    name: 'VHL Central',
+    sub: 'Vista Higher Learning — Spanish',
+    tier: 'secondary',
+    audience: ['teaching'],
+    type: 'syntheticprobe',
+    apiUrl: 'vhlcentral.json',
+    pageUrl: 'https://www.vhlcentral.com/',
+    whatItDoes: 'Spanish textbook, workbook, and audio/video practice. Launched from Canvas course navigation and assignments, with scores passed back to the gradebook.',
+    whenDown: 'Students can\'t open or submit VHL activities from Canvas. Work already submitted and scores already passed back are safe.',
+    extraLink: { label: 'VHL support center', url: 'https://support.vhlcentral.com/hc/en-us' }},
+  // The KWL Hub (Klett World Languages — French). Same position as VHL, one step
+  // weaker: status.thekwlhub.com does not resolve, and there is no StatusGator
+  // monitor or incident log — support.thekwlhub.com is an Elevio help centre and
+  // blog.thekwlhub.com is a release-notes blog. thekwlhub.com 302-redirects to
+  // klettlp.com/login.htm?tenant=klettlp (the MagicBox-hosted platform Canvas is
+  // registered against), and the probe follows redirects, so the single target
+  // covers the entry point teachers use and the platform behind it.
+  {
+    id: 'kwlhub',
+    task: 'canvas',
+    category: 'practice-content',
+    name: 'The KWL Hub',
+    sub: 'Klett World Languages — French',
+    tier: 'secondary',
+    audience: ['teaching'],
+    type: 'syntheticprobe',
+    apiUrl: 'kwlhub.json',
+    pageUrl: 'https://thekwlhub.com/',
+    whatItDoes: 'French digital textbook, practice, and assignments from Klett. Launched from Canvas course navigation and the assignment menus, with scores passed back to the gradebook.',
+    whenDown: 'French classes lose the digital textbook and assigned practice; Canvas assignments that launch the Hub won\'t open.',
+    extraLink: { label: 'KWL Hub support', url: 'https://support.thekwlhub.com/en' }},
   // DeltaMath (Atlassian Statuspage v2 with public CORS-enabled API, so we
   // fetch directly in the browser — no GitHub Action needed. Same code path
   // as Canvas, AspirEDU, Cloudflare, etc. Previously a StatusGator link-only
