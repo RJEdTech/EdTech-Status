@@ -2,7 +2,7 @@ name: Fetch reachability probes
 
 # Reachability probes for tools that have NO public status page:
 # MaxPreps, Neptune GameTime, ATGenius, Swank Digital Campus, Project STEM,
-# and Flint (the K-12 AI platform:
+# VHL Central, The KWL Hub, and Flint (the K-12 AI platform:
 # status.flintk12.com just 302-redirects to an app sign-in, so there is no
 # public status JSON to read). Each is a server-side HTTP check
 # (classified by response, not by scraping a banner), written to its own JSON
@@ -72,6 +72,15 @@ jobs:
             // platform is robots-restricted (courses.projectstem.org refuses
             // crawlers outright) and may answer datacenter IPs with 401/403.
             { name: 'Project STEM',     url: 'https://projectstem.org/users/sign_in', out: 'projectstem.json', forbiddenIsUp: true },
+            // VHL Central (Spanish) and The KWL Hub (French) — both launched from Canvas.
+            // Neither vendor publishes a status source: status.vhlcentral.com resolves but
+            // answers HTTP 402 (lapsed status-page subscription) and status.thekwlhub.com
+            // does not resolve at all. VHL's target is the public LTI JWKS endpoint Canvas
+            // fetches on every launch, so the probe follows the integration path rather than
+            // the marketing site. thekwlhub.com 302s to klettlp.com/login.htm (MagicBox), and
+            // probeOnce follows redirects, so one target covers both hostnames.
+            { name: 'VHL Central', url: 'https://www.vhlcentral.com/lti/keys', out: 'vhlcentral.json', forbiddenIsUp: true },
+            { name: 'The KWL Hub', url: 'https://thekwlhub.com/',              out: 'kwlhub.json'     },
           ];
 
           const ATTEMPTS      = 3;      // best-of, to dampen single-request runner blips
@@ -171,7 +180,7 @@ jobs:
             // That is the EDGE responding — proof of reachability, not a moved URL
             // — so treat it as operational. A real outage still surfaces as a 5xx
             // or a timeout (major), and a 404/410 still means the URL moved.
-            if (t.forbiddenIsUp && best.kind === 'probeError' && /HTTP (401|403)/.test(best.detail)) {
+            if (t.forbiddenIsUp && best.kind === 'probeError' && /HTTP (401|402|403)/.test(best.detail)) {
               best = { kind: 'status', severity: 'operational', label: 'Reachable',
                        detail: best.detail + ' (auth-gated edge)' };
             }
@@ -236,5 +245,5 @@ jobs:
       - name: Commit and report
         uses: ./.github/actions/commit-snapshot
         with:
-          files: maxpreps.json neptune.json atgenius.json flint.json swank.json projectstem.json
+          files: maxpreps.json neptune.json atgenius.json flint.json swank.json projectstem.json vhlcentral.json kwlhub.json
           message: Update athletics probe snapshots
