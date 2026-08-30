@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-08-29T22:35:52.195Z",
+  "checkedAt": "2026-08-30T00:40:32.873Z",
   "vendors": {
     "instructure": "degraded",
     "blackbaud": "operational",
@@ -19,6 +19,10 @@
     "soundtrap": "operational",
     "canva": "operational",
     "noredink": "operational",
+    "vhlcentral": "operational",
+    "kwlhub": "operational",
+    "autodesk": "operational",
+    "onshape": "operational",
     "arbitersports": "operational",
     "maxpreps": "operational",
     "neptune": "operational",
