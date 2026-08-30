@@ -1181,7 +1181,7 @@ const VENDORS = [
   },
 
   // ============================================================
-  // SECONDARY (13) — Canvas integrations and side tools
+  // SECONDARY (15) — Canvas integrations and side tools
   // ============================================================
   {
     id: 'respondus',
@@ -1445,6 +1445,51 @@ const VENDORS = [
     whenDown: 'CS classes lose the lesson, the code editor, and the autograder all at once, so there is no coursework to fall back on — plan an unplugged activity for the period. Nothing outside CS is affected.',
     extraLink: { label: 'Project STEM support', url: 'https://projectstem.org/contactus' }
   },
+  // Autodesk (Revit, Fusion, Tinkercad) — the Autodesk Health Dashboard is a
+  // standard Atlassian Statuspage with a public CORS-enabled API, so we fetch it
+  // directly in the browser, same code path as Canva/DeltaMath/Cloudflare. No
+  // GitHub Action needed.
+  //
+  // Scope note, deliberate: the dashboard covers 150+ Autodesk services with
+  // regional variants, and the top-level indicator fires when ANY of them is
+  // degraded — so this tile can go amber for something RJ never touches. Chosen
+  // anyway because the component that matters most, "Identity, Licensing &
+  // Entitlement", is the one that stops locally-installed Revit from opening at
+  // all, and a false amber is cheaper than missing that. If it proves noisy,
+  // switch to summary.json and filter on Identity/Licensing, Revit Cloud
+  // Worksharing, Fusion and Tinkercad.
+  {
+    id: 'autodesk',
+    task: 'teach',
+    category: 'engagement-standalone',
+    name: 'Autodesk',
+    sub: 'Revit, Fusion, Tinkercad & licensing',
+    tier: 'secondary',
+    audience: ['teaching'],
+    type: 'statuspage',
+    apiUrl: 'https://health.autodesk.com/api/v2/status.json',
+    summaryUrl: 'https://health.autodesk.com/api/v2/summary.json',
+    pageUrl: 'https://health.autodesk.com/',
+    whatItDoes: 'Autodesk\'s cloud services behind Revit and the rest of the design tools — including the identity and licensing servers that installed copies of Revit check in with.',
+    whenDown: 'Sign-in and licence checks can fail, which stops Revit opening even though it is installed on the machine. Cloud worksharing, Fusion, and Tinkercad work pauses; local files are untouched.',
+    extraLink: { label: 'Autodesk service status', url: 'https://health.autodesk.com/incidents' }},
+  // Onshape (cloud CAD, built by the SolidWorks founding team; now PTC).
+  // Atlassian Statuspage with a public API — direct browser fetch, no Action.
+  {
+    id: 'onshape',
+    task: 'teach',
+    category: 'engagement-standalone',
+    name: 'Onshape',
+    sub: 'Browser-based CAD',
+    tier: 'secondary',
+    audience: ['teaching'],
+    type: 'statuspage',
+    apiUrl: 'https://status.onshape.com/api/v2/status.json',
+    summaryUrl: 'https://status.onshape.com/api/v2/summary.json',
+    pageUrl: 'https://status.onshape.com/',
+    whatItDoes: 'Browser-based CAD for design and engineering classes. Documents, version history, and assemblies all live in Onshape\'s cloud — there is no local copy.',
+    whenDown: 'Modelling stops completely: documents will not open and nothing can be saved or exported until service returns. Work already saved is intact.',
+    extraLink: { label: 'Uptime history', url: 'https://status.onshape.com/uptime' }},
 
   // ============================================================
   // INFRASTRUCTURE (2) — platforms our tools depend on
