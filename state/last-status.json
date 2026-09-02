@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-09-02T10:46:19.998Z",
+  "checkedAt": "2026-09-02T14:44:23.107Z",
   "vendors": {
-    "instructure": "breakage",
+    "instructure": "operational",
     "blackbaud": "operational",
     "myrj": "operational",
     "vivi": "operational",
@@ -10,7 +10,7 @@
     "ruvna": "operational",
     "rj-website": "operational",
     "copyleaks": "operational",
-    "aspiredu": "breakage",
+    "aspiredu": "operational",
     "deltamath": "operational",
     "finalsite": "operational",
     "hudl": "operational",
