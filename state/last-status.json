@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-09-04T17:38:39.543Z",
+  "checkedAt": "2026-09-04T19:51:05.637Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -21,7 +21,7 @@
     "noredink": "operational",
     "vhlcentral": "operational",
     "kwlhub": "operational",
-    "autodesk": "operational",
+    "autodesk": "degraded",
     "onshape": "operational",
     "arbitersports": "operational",
     "maxpreps": "operational",
