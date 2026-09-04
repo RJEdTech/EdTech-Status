@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-09-04T05:49:35.953Z",
+  "checkedAt": "2026-09-04T09:59:41.474Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -13,7 +13,7 @@
     "aspiredu": "operational",
     "deltamath": "operational",
     "finalsite": "operational",
-    "hudl": "partial",
+    "hudl": "operational",
     "explorelearning": "operational",
     "gimkit": "operational",
     "soundtrap": "operational",
@@ -21,7 +21,7 @@
     "noredink": "operational",
     "vhlcentral": "operational",
     "kwlhub": "operational",
-    "autodesk": "operational",
+    "autodesk": "degraded",
     "onshape": "operational",
     "arbitersports": "operational",
     "maxpreps": "operational",
