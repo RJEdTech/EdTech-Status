@@ -1,8 +1,8 @@
 {
-  "fetchedAt": "2026-09-10T17:38:38.844Z",
+  "fetchedAt": "2026-09-10T20:04:55.242Z",
   "severity": "operational",
   "statusLabel": "Reachable",
-  "statusDetail": "HTTP 403 (auth-gated edge)",
+  "statusDetail": "HTTP 200",
   "parseError": null,
-  "lastSuccessfulParse": "2026-09-10T17:38:38.844Z"
+  "lastSuccessfulParse": "2026-09-10T20:04:55.242Z"
 }
