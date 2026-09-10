@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-09-10T14:04:46.621Z",
+  "checkedAt": "2026-09-10T17:39:58.111Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "degraded",
+    "blackbaud": "operational",
     "myrj": "operational",
     "vivi": "operational",
     "flint": "operational",
@@ -24,7 +24,7 @@
     "autodesk": "operational",
     "onshape": "operational",
     "arbitersports": "operational",
-    "maxpreps": "operational",
+    "maxpreps": "breakage",
     "neptune": "operational",
     "atgenius": "operational",
     "swank": "operational",
