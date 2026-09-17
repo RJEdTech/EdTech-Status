@@ -10,19 +10,16 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#C11430">
 
-<!-- Theme bootstrap. Runs before <body> renders so we don't get a flash of the
-     wrong theme on load. Reads the persisted choice from localStorage; falls
-     back to the OS-level prefers-color-scheme. -->
+<!-- Light/dark follows the operating system setting. Runs before <body>
+     renders, so there is no flash of the wrong theme. No in-page toggle by design. -->
 <script>
-  (function () {
-    try {
-      var saved = localStorage.getItem('rj-theme'); // 'light' | 'dark' | null
-      var theme = saved || 'light';   // family default = light
-      document.documentElement.setAttribute('data-theme', theme);
-    } catch (e) {
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-  })();
+(function(){
+  var mq = window.matchMedia("(prefers-color-scheme: dark)");
+  function apply(){ document.documentElement.setAttribute("data-theme", mq.matches ? "dark" : "light"); }
+  apply();
+  if (mq.addEventListener) mq.addEventListener("change", apply);
+  else if (mq.addListener) mq.addListener(apply);
+})();
 </script>
 
 <style>
@@ -877,18 +874,6 @@ body { background: var(--bg); }
       <div class="meta">
         <div class="meta-row">
           <!-- Theme toggle: shows sun icon in dark mode, moon in light mode -->
-          <button class="btn btn-icon" id="themeBtn" type="button"
-                  aria-label="Toggle light and dark theme" title="Toggle theme">
-            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="4"/>
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
-            </svg>
-            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-            </svg>
-          </button>
           <button class="btn" id="copyLinkBtn" type="button" title="Copy dashboard link to share">⧉ Copy link</button>
           <button class="btn" id="refreshBtn" type="button">↻ Refresh now</button>
         </div>
@@ -949,19 +934,6 @@ body { background: var(--bg); }
 
 </div>
 
-<!-- Theme toggle handler. Persists choice; no-ops gracefully if storage blocked. -->
-<script>
-  (function () {
-    var btn = document.getElementById('themeBtn');
-    if (!btn) return;
-    btn.addEventListener('click', function () {
-      var current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-      var next = current === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', next);
-      try { localStorage.setItem('rj-theme', next); } catch (e) { /* private mode etc — silently fall through */ }
-    });
-  })();
-</script>
 
 <script>
 //=============================================================================
