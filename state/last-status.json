@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-09-19T11:12:02.849Z",
+  "checkedAt": "2026-09-19T14:29:43.622Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -24,7 +24,7 @@
     "autodesk": "operational",
     "onshape": "operational",
     "arbitersports": "operational",
-    "maxpreps": "operational",
+    "maxpreps": "breakage",
     "neptune": "operational",
     "atgenius": "operational",
     "swank": "operational",
