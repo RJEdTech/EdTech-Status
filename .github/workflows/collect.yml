@@ -1,0 +1,124 @@
+name: Collect status
+
+# The single scheduled entry point for the whole dashboard.
+#
+# WHY THIS EXISTS. Until 2026-09-21 this repo had ten scheduled workflows: nine
+# collectors on staggered 'N-59/15' crons plus the alerter on '*/10'. Intent was
+# a reading every 15 minutes. Measured reality on 2026-09-20 was one run every
+# 2.2 hours — GitHub load-sheds scheduled workflows per schedule trigger, and a
+# repo asking for ten dispatches every quarter-hour is exactly the shape that
+# gets deprioritised. The cron strings were all correct. There were just too
+# many of them.
+#
+# The cost was not theoretical: Blackbaud's outage onset on 9/20 is unknowable
+# to better than four hours, and the 90-minute stale threshold in index.html
+# started firing on perfectly healthy collectors because the cadence it assumes
+# had quietly stopped existing.
+#
+# ORDER MATTERS. Alerting runs after collection, so the alerter diffs against
+# snapshots written this cycle rather than the previous one. On its old
+# independent cron it could do either.
+#
+# Every job is `if: always()` so one vendor's bad day cannot stop the rest of
+# the cycle from being collected or alerted on.
+#
+# If dispatch rate is still short of the intended 144/day after this, the next
+# lever is moving the schedule off GitHub entirely (an external ping at
+# workflow_dispatch), not tuning the cron string.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# A delayed cycle must not overlap the next one — they would race on the push
+# and the alerter would diff against a half-written cycle.
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  # ---- Family A: parser-family vendors, one job, one commit ----------------
+  # These five were five separate workflows whose bodies were one
+  # fetch-snapshot.js call each. Running them sequentially here turns five
+  # pushes per cycle into one. The parsing logic is untouched; it still lives
+  # in .github/scripts/vendors/*.js and is still unit-tested.
+  parsers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch parser-family vendors
+        id: parse
+        run: |
+          set -uo pipefail
+          # fetch-snapshot.js exits 0 for every EXPECTED failure — a timeout, a
+          # 5xx, an unrecognised page — because those are snapshot states, not
+          # run failures. A non-zero exit means the vendor MODULE crashed. Keep
+          # going so one broken module cannot cost us the other four readings,
+          # and report at the end.
+          FAILED=""
+          for vendor in aws explorelearning gimkit noredink soundtrap; do
+            echo "::group::$vendor"
+            node .github/scripts/fetch-snapshot.js "$vendor" || FAILED="$FAILED $vendor"
+            echo "::endgroup::"
+          done
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and report
+        uses: ./.github/actions/commit-snapshot
+        with:
+          files: aws.json explorelearning.json gimkit.json noredink.json soundtrap.json
+          message: Update parser status snapshots
+
+      - name: Fail on vendor module crash
+        if: steps.parse.outputs.failed != ''
+        run: |
+          echo "::error::vendor module crashed:${{ steps.parse.outputs.failed }}"
+          exit 1
+
+  # ---- Family B: reachability probes ---------------------------------------
+  # Kept as separate workflow files with byte-identical bodies. Their checks are
+  # inline heredocs with per-vendor redirect and status-code reasoning; porting
+  # them into this file would risk behaviour change for no gain.
+  probe-athletics:
+    needs: parsers
+    if: always()
+    permissions:
+      contents: write
+    uses: ./.github/workflows/fetch-athletics-probes.yml
+
+  probe-arbitersports:
+    needs: parsers
+    if: always()
+    permissions:
+      contents: write
+    uses: ./.github/workflows/fetch-arbitersports.yml
+
+  probe-myrj:
+    needs: parsers
+    if: always()
+    permissions:
+      contents: write
+    uses: ./.github/workflows/fetch-myrj.yml
+
+  probe-rj-website:
+    needs: parsers
+    if: always()
+    permissions:
+      contents: write
+    uses: ./.github/workflows/fetch-rj-website.yml
+
+  # ---- Alert last, on this cycle's snapshots -------------------------------
+  alert:
+    needs: [parsers, probe-athletics, probe-arbitersports, probe-myrj, probe-rj-website]
+    if: always()
+    permissions:
+      contents: write
+    uses: ./.github/workflows/alert-changes.yml
+    secrets: inherit

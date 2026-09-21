@@ -20,11 +20,12 @@ name: Alert on status changes
 # correct merge semantic — we never need to reconcile with the remote copy.
 
 on:
-  schedule:
-    # Every 10 minutes. GitHub may delay scheduled runs during high load,
-    # so actual cadence can be 10-20 minutes — fine for this purpose.
-    - cron: '*/10 * * * *'
-  workflow_dispatch:  # allow manual trigger from the Actions tab
+  # No cron here on purpose. collect.yml owns the only schedule in this repo
+  # and calls this workflow. GitHub deprioritises scheduled workflows per
+  # schedule trigger, so ten separate cron entries competing every quarter-hour
+  # got about one run in nine actually dispatched. See collect.yml.
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: write  # needed to commit updated state file
@@ -48,6 +49,14 @@ jobs:
           node <<'EOF'
           const fs = require('fs');
           const https = require('https');
+          const path = require('path');
+
+          // Cloudflare's rule lives in one place and is shared with index.html.
+          // This script runs from the repo root via actions/checkout, but it is fed
+          // on stdin, so resolve the path explicitly rather than relying on the
+          // require() cwd behaviour for '[stdin]' modules.
+          const { evaluateCloudflare } = require(
+            path.join(process.cwd(), '.github', 'scripts', 'cloudflare-filter.js'));
 
           // ---------- Vendor configuration ----------
           // Mirrors index.html's VENDORS array (31 tiles; m365 is link-only and
@@ -166,8 +175,13 @@ jobs:
             { id: 'aws', name: 'AWS', tier: 'infra', kind: 'snapshot', shape: 'severity',
               file: 'aws.json',
               pageUrl: 'https://health.aws.amazon.com/health/status' },
-            { id: 'cloudflare', name: 'Cloudflare', tier: 'infra', kind: 'statuspage',
+            // Cloudflare gets its own kind: taking the page-wide indicator verbatim
+            // (as this used to) recorded 'degraded' every single day, which is how a
+            // stuck value sat in last-status.json unchanged from 9/06 to 9/21 and
+            // drove a permanent yellow banner on the dashboard.
+            { id: 'cloudflare', name: 'Cloudflare', tier: 'infra', kind: 'cloudflare',
               url: 'https://www.cloudflarestatus.com/api/v2/status.json',
+              incidentsUrl: 'https://www.cloudflarestatus.com/api/v2/incidents/unresolved.json',
               pageUrl: 'https://www.cloudflarestatus.com/' },
           ];
 
@@ -288,6 +302,35 @@ jobs:
             }
           }
 
+          // Cloudflare. Severity comes only from unresolved incidents on RJ's traffic
+          // path — never the page-wide indicator, never component state, never
+          // scheduled maintenance. evaluateCloudflare() is the shared implementation
+          // in .github/scripts/cloudflare-filter.js; index.html holds a synced copy of
+          // the same block and a test fails the build if they drift.
+          async function cloudflareSeverity(vendor) {
+            let statusData = null;
+            try { statusData = await fetchJson(vendor.url); }
+            catch (e) { console.log(`[cloudflare] status.json unreadable: ${e.message}`); }
+
+            let incidentsData = null;
+            let incidentsUnavailable = false;
+            try { incidentsData = await fetchJson(vendor.incidentsUrl); }
+            catch (e) {
+              incidentsUnavailable = true;
+              console.log(`[cloudflare] incident list unreadable: ${e.message}`);
+            }
+
+            const verdict = evaluateCloudflare(statusData, incidentsData, { incidentsUnavailable });
+            if (verdict.filtered.length > 0) {
+              console.log(`[cloudflare] filtered as off our traffic path: ` +
+                verdict.filtered.map((i) => i.name).join(' | '));
+            }
+            for (const hit of verdict.impacting) {
+              console.log(`[cloudflare] counted (${hit.classification}): ${hit.incident.name}`);
+            }
+            return verdict.severity;
+          }
+
           // Instatus summary endpoint. Mirrors fetchInstatus() in index.html:
           // active incidents win, then active maintenances, then page.status.
           function instatusSeverity(data) {
@@ -340,6 +383,9 @@ jobs:
           // ---------- Fetch one vendor ----------
           async function getCurrentSeverity(vendor) {
             try {
+              if (vendor.kind === 'cloudflare') {
+                return await cloudflareSeverity(vendor);
+              }
               if (vendor.kind === 'statuspage') {
                 return statuspageSeverity(await fetchJson(vendor.url));
               }

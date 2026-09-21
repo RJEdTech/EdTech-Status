@@ -1508,7 +1508,10 @@ const VENDORS = [
     audience: ['teaching', 'operations'],
     type: 'cloudflare',
     apiUrl: 'https://www.cloudflarestatus.com/api/v2/status.json',
-    summaryUrl: 'https://www.cloudflarestatus.com/api/v2/summary.json',
+    // Unresolved incidents only — deliberately NOT summary.json. summary.json
+    // carries all ~480 components plus scheduled_maintenances, none of which
+    // may drive this tile, and it is a ~400 KB download on every page load.
+    incidentsUrl: 'https://www.cloudflarestatus.com/api/v2/incidents/unresolved.json',
     pageUrl: 'https://www.cloudflarestatus.com/',
     whatItDoes: 'Routes and protects traffic for many vendor sites — sits between us and them. Cloudflare\'s status page reports issues across hundreds of products and global regions; most have no effect on RJ classrooms. The dashboard filters incidents and highlights only the ones likely to affect RJ.',
     whenDown: 'Only matters if a primary tool (Canvas, NoRedInk) is also red. Cloudflare yellow on its own — especially for products like Access, WARP, Zero Trust, Workers, R2, Pages, Stream, or non-NA datacenters — does not affect RJ teaching tools.'},
@@ -1741,22 +1744,43 @@ let lastResults = null;
 //=============================================================================
 // CLOUDFLARE INCIDENT FILTERING
 //=============================================================================
+// DO NOT EDIT THE MARKED BLOCK BELOW BY HAND. It is a verbatim copy of
+// .github/scripts/cloudflare-filter.js, which the alerter workflow also uses.
+// Edit that file, then run:
+//
+//     node .github/scripts/sync-cf-filter.js
+//
+// .github/scripts/test/cloudflare-filter.test.js fails the build if the two
+// copies drift. Two hand-maintained copies are exactly how the permanent
+// "Cloudflare is reporting issues" banner survived for weeks: the tile's
+// classifier was right and the alerter had no classifier at all.
+
+// ----8<---- BEGIN SHARED CLOUDFLARE FILTER ----8<----
 // RJ doesn't use Cloudflare directly — we feel CF outages only when they hit
 // products that vendor sites we DO use (Canvas, NoRedInk) depend on.
-// Cloudflare's status page reports issues across hundreds of products and
-// regions globally. Most are noise from RJ's perspective.
 //
-// fetchCloudflare() calls fetchStatuspage() to get the standard result, then
-// classifies the active incident name into one of three buckets:
+// THE RULE, learned the hard way on 2026-09-21:
 //
-//   'rj-impacting'     → tile renders the Cloudflare-reported severity as-is
-//   'rj-not-impacting' → tile keeps the CF severity but rewrites status text
-//                        to clarify that RJ services aren't affected
-//   'ambiguous'        → conservative default, treated as rj-impacting
+//   Cloudflare's severity comes from unresolved INCIDENTS on our traffic path.
+//   Never the page-wide indicator. Never component state. Never scheduled
+//   maintenance.
 //
-// Tuning principle: false negatives (missing a real outage) are worse than
-// false positives (flagging unnecessarily). When in doubt, classify as
-// impacting.
+// Why: Cloudflare publishes ~480 components covering every POP and region on
+// earth. On a normal day dozens are in partial_outage or under_maintenance, so
+// status.indicator is essentially never 'none'. Reading the indicator — which
+// both the tile and the alerter used to do — produced a permanent "Cloudflare
+// is reporting issues" banner that told teachers nothing and trained them to
+// ignore the banner entirely. A signal that is always on is not a signal.
+//
+// Each unresolved incident's NAME is classified into one of three buckets:
+//
+//   'rj-impacting'     → counts; severity comes from the incident's impact
+//   'rj-not-impacting' → filtered out of the severity decision entirely
+//   'ambiguous'        → conservative default, counted as impacting
+//
+// Tuning principle, unchanged: false negatives (missing a real outage) are
+// worse than false positives (flagging unnecessarily). An incident matching no
+// keyword at all is 'ambiguous' and still escalates.
 //
 // VIVI NOTE: Vivi (classroom display) is on AWS but we have not confirmed
 // whether it's also fronted by Cloudflare. If a real-world correlation is
@@ -1859,6 +1883,12 @@ const CF_NON_NA_CITIES = [
   // confined to Canada, it's unlikely to affect Aurora-routed traffic.)
 ];
 
+// Statuspage incident.status values that mean "still happening". 'resolved'
+// and 'postmortem' are over and must never drive a tile colour.
+const CF_UNRESOLVED_INCIDENT_STATUSES = [
+  'investigating', 'identified', 'monitoring',
+];
+
 // Classify a Cloudflare incident name. Returns one of:
 //   'rj-impacting' | 'rj-not-impacting' | 'ambiguous'
 function classifyCloudflareIncident(incidentName) {
@@ -1883,6 +1913,132 @@ function classifyCloudflareIncident(incidentName) {
   // Nothing matched — be conservative.
   return 'ambiguous';
 }
+
+// Map a Statuspage incident's own `impact` to our severity vocabulary.
+// Note this reads the INCIDENT's impact, not the page-wide indicator.
+function cloudflareIncidentSeverity(impact) {
+  switch (impact) {
+    case 'critical': return 'major';
+    case 'major':    return 'partial';
+    case 'minor':    return 'degraded';
+    case 'none':     return 'degraded';
+    default:         return 'degraded';
+  }
+}
+
+const CF_SEVERITY_RANK = { operational: 0, degraded: 1, partial: 2, major: 3 };
+
+// Decide what RJ should be told about Cloudflare.
+//
+//   statusData    — parsed /api/v2/status.json          (may be null)
+//   incidentsData — parsed /api/v2/incidents/unresolved.json
+//   opts.incidentsUnavailable — true when we could not read the incident list
+//
+// Returns { severity, statusText, incident, impacting, filtered }.
+// `incident` is shaped for the dashboard tile: { name, status, updatedAt }.
+function evaluateCloudflare(statusData, incidentsData, opts) {
+  const options = opts || {};
+  const description = (statusData && statusData.status && statusData.status.description) || null;
+  const indicator = (statusData && statusData.status && statusData.status.indicator) || null;
+
+  // We cannot apply the rule without the incident list. Falling back to the
+  // indicator is exactly the behaviour this module exists to remove, so say so
+  // out loud rather than quietly reporting a colour we don't believe.
+  if (options.incidentsUnavailable) {
+    return {
+      severity: indicator && indicator !== 'none' ? 'degraded' : 'operational',
+      statusText: 'Could not read Cloudflare\'s incident list — showing their page-wide status',
+      incident: description
+        ? { name: 'Cloudflare reports: ' + description, status: 'unverified', updatedAt: null }
+        : null,
+      impacting: [],
+      filtered: [],
+    };
+  }
+
+  const all = (incidentsData && Array.isArray(incidentsData.incidents))
+    ? incidentsData.incidents
+    : [];
+
+  // Defensive: /incidents/unresolved.json should only ever contain unresolved
+  // incidents, but summary.json does not make that promise, and this function
+  // accepts either shape.
+  const unresolved = all.filter((inc) =>
+    inc && CF_UNRESOLVED_INCIDENT_STATUSES.includes(inc.status));
+
+  const impacting = [];
+  const filtered = [];
+  for (const inc of unresolved) {
+    const classification = classifyCloudflareIncident(inc.name);
+    if (classification === 'rj-not-impacting') filtered.push(inc);
+    else impacting.push({ incident: inc, classification });
+  }
+
+  // ---- Nothing on our traffic path ----
+  if (impacting.length === 0) {
+    let statusText;
+    let incident = null;
+
+    if (filtered.length > 0) {
+      // Name what Cloudflare reports, so the tile is informative rather than
+      // just green. This is the ordinary resting state.
+      const names = filtered.map((i) => i.name);
+      statusText = 'Working for us — Cloudflare issue not on our traffic path';
+      incident = {
+        name: 'Cloudflare reports: ' + names.join('; '),
+        status: 'not affecting RJ tools',
+        updatedAt: filtered[0].updated_at || filtered[0].created_at || null,
+      };
+    } else if (indicator && indicator !== 'none') {
+      // No incidents at all, but the page-wide indicator is non-green — this
+      // is component/POP noise or scheduled maintenance. Deliberately ignored.
+      statusText = 'Working for us — no open Cloudflare incidents';
+      incident = description
+        ? {
+            name: 'Cloudflare\'s page-wide status reads "' + description +
+                  '" (regional POPs and maintenance, no open incident)',
+            status: 'not affecting RJ tools',
+            updatedAt: null,
+          }
+        : null;
+    } else {
+      statusText = description || 'All Systems Operational';
+    }
+
+    return { severity: 'operational', statusText, incident, impacting: [], filtered };
+  }
+
+  // ---- At least one incident on our traffic path ----
+  let worst = impacting[0];
+  let worstSeverity = cloudflareIncidentSeverity(worst.incident.impact);
+  for (const candidate of impacting) {
+    const sev = cloudflareIncidentSeverity(candidate.incident.impact);
+    if (CF_SEVERITY_RANK[sev] > CF_SEVERITY_RANK[worstSeverity]) {
+      worst = candidate;
+      worstSeverity = sev;
+    }
+  }
+
+  const extra = impacting.length > 1
+    ? ' (+' + (impacting.length - 1) + ' more)'
+    : '';
+  const qualifier = worst.classification === 'ambiguous'
+    ? ' — unclear whether RJ is affected'
+    : '';
+
+  return {
+    severity: worstSeverity,
+    statusText: (description || 'Cloudflare reporting an incident') + qualifier,
+    incident: {
+      name: worst.incident.name + extra,
+      status: worst.incident.status || 'investigating',
+      updatedAt: worst.incident.updated_at || worst.incident.created_at || null,
+    },
+    impacting,
+    filtered,
+  };
+}
+// ----8<---- END SHARED CLOUDFLARE FILTER ----8<----
 
 //=============================================================================
 // FETCHERS
@@ -1991,44 +2147,44 @@ async function fetchStatuspage(vendor) {
   };
 }
 
-// Cloudflare wrapper around fetchStatuspage. Calls the underlying Statuspage
-// fetcher, then post-processes the result to filter out incidents that don't
-// affect RJ. See CLOUDFLARE INCIDENT FILTERING block above for the full
-// classification logic and rationale.
+// Cloudflare reader. Does NOT go through fetchStatuspage(), because the whole
+// point is that Cloudflare's page-wide indicator must not reach the tile: on a
+// normal day dozens of their ~480 components are degraded or in maintenance, so
+// the indicator is almost never 'none'. See the CLOUDFLARE INCIDENT FILTERING
+// block above for the rule and evaluateCloudflare() for the decision itself.
 async function fetchCloudflare(vendor) {
-  // Get the standard Statuspage result first.
-  const result = await fetchStatuspage(vendor);
+  // status.json is small and gives us the human-readable description to quote.
+  // It is presentation only; it never decides severity.
+  let statusData = null;
+  try {
+    const res = await fetch(resolveDataUrl(vendor.apiUrl), { cache: 'no-store' });
+    if (res.ok) statusData = await res.json();
+  } catch (_) { /* non-fatal — description is decoration */ }
 
-  // If Cloudflare reports operational (no incident), nothing to filter.
-  if (result.severity === 'operational' || !result.incident) {
-    return result;
-  }
-
-  // If the result is already breakage (schema validation failed), pass through.
-  if (result.breakage) {
-    return result;
-  }
-
-  // Classify the active incident.
-  const classification = classifyCloudflareIncident(result.incident.name);
-
-  if (classification === 'rj-impacting' || classification === 'ambiguous') {
-    // Render as Cloudflare reports it. No change.
-    return result;
-  }
-
-  // classification === 'rj-not-impacting':
-  // Keep the CF-reported severity (Option A — don't downgrade to green),
-  // but rewrite the status text to clarify RJ isn't affected.
-  return {
-    ...result,
-    statusText: 'Cloudflare reporting issues — not affecting RJ teaching tools',
-    incident: {
-      ...result.incident,
-      // Preserve the original name in the incident detail so the reader
-      // can still see what Cloudflare is reporting.
-      name: result.incident.name,
+  // The incident list IS the signal. If we can't read it, say so rather than
+  // silently falling back to the indicator.
+  let incidentsData = null;
+  let incidentsUnavailable = false;
+  try {
+    const res = await fetch(resolveDataUrl(vendor.incidentsUrl), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    incidentsData = await res.json();
+    if (!Array.isArray(incidentsData.incidents)) {
+      throw new Error('incidents array missing from API response');
     }
+  } catch (e) {
+    incidentsUnavailable = true;
+  }
+
+  const verdict = evaluateCloudflare(statusData, incidentsData, { incidentsUnavailable });
+
+  return {
+    severity: verdict.severity,
+    statusText: verdict.statusText,
+    incident: verdict.incident,
+    // "Last checked" must be when WE fetched, not when Cloudflare last edited
+    // their page — same reasoning as fetchStatuspage().
+    updatedAt: new Date().toISOString()
   };
 }
 

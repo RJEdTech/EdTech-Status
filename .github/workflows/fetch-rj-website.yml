@@ -1,14 +1,12 @@
 name: Fetch RJ Website status
 
 on:
-  schedule:
-    # Every 15 minutes. GitHub may delay scheduled runs during high load,
-    # so actual cadence can be 5-15 minutes — fine for our purposes.
-    # The minute offset only spreads the nine scrapers out so they collide
-    # less often; the commit-snapshot action is what actually makes the
-    # pushes safe when they do collide.
-    - cron: '10-59/15 * * * *'
-  workflow_dispatch:  # Allow manual runs from the Actions tab
+  # No cron here on purpose. collect.yml owns the only schedule in this repo
+  # and calls this workflow. GitHub deprioritises scheduled workflows per
+  # schedule trigger, so ten separate cron entries competing every quarter-hour
+  # got about one run in nine actually dispatched. See collect.yml.
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: write  # Needed to commit the updated JSON file
