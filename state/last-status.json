@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-09-22T18:04:16.133Z",
+  "checkedAt": "2026-09-22T21:13:42.146Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "operational",
+    "blackbaud": "degraded",
     "myrj": "operational",
     "vivi": "operational",
     "flint": "operational",
@@ -21,7 +21,7 @@
     "noredink": "operational",
     "vhlcentral": "operational",
     "kwlhub": "operational",
-    "autodesk": "degraded",
+    "autodesk": "operational",
     "onshape": "operational",
     "arbitersports": "operational",
     "maxpreps": "operational",
