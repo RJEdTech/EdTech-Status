@@ -1,11 +1,8 @@
 {
-  "fetchedAt": "2026-09-22T00:11:56.401Z",
+  "fetchedAt": "2026-09-22T04:58:46.338Z",
   "severity": "operational",
   "statusLabel": "Reachable",
-  "statusDetail": "HTTP 403",
-  "parseError": {
-    "message": "MaxPreps probe returned HTTP 403 — https://www.maxpreps.com/ may have moved. Update the target in fetch-athletics-probes.yml.",
-    "firstFailedAt": "2026-09-22T00:11:56.401Z"
-  },
-  "lastSuccessfulParse": "2026-09-19T14:50:04.695Z"
+  "statusDetail": "HTTP 200",
+  "parseError": null,
+  "lastSuccessfulParse": "2026-09-22T04:58:46.338Z"
 }
