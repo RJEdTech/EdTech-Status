@@ -1,13 +1,13 @@
 {
-  "checkedAt": "2026-09-22T14:10:49.462Z",
+  "checkedAt": "2026-09-22T18:04:16.133Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "degraded",
+    "blackbaud": "operational",
     "myrj": "operational",
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
-    "ruvna": "partial",
+    "ruvna": "operational",
     "rj-website": "operational",
     "copyleaks": "operational",
     "aspiredu": "operational",
