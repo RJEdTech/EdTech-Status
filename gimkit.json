@@ -1,8 +1,8 @@
 {
-  "fetchedAt": "2026-09-27T06:42:49.115Z",
+  "fetchedAt": "2026-09-27T12:29:27.487Z",
   "source": "https://gimkit.crisp.watch/en/",
-  "severity": "partial",
+  "severity": "operational",
   "parseError": null,
   "fetchTrouble": null,
-  "lastSuccessfulParse": "2026-09-27T06:42:49.115Z"
+  "lastSuccessfulParse": "2026-09-27T12:29:27.487Z"
 }
