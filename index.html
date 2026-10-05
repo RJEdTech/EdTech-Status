@@ -1005,21 +1005,21 @@ const SECTIONS = {
     { id: 'safety',     label: 'Safety & communication', note: 'Emergency notifications and safety systems', categories: ['safety-ops'] },
     { id: 'comm',       label: 'Email & communication', note: 'Outlook and Teams', categories: ['email-comm'] },
     { id: 'canvas',     label: 'Canvas integrations',   note: 'Tools that plug into Canvas for grading, practice, and assessment', categories: ['quiz-proctoring', 'plagiarism', 'analytics', 'practice-content', 'engagement-canvas'] },
-    { id: 'other',      label: 'Other teaching tools',  note: 'General-purpose tools some teachers use', categories: ['engagement-standalone'] }
+    { id: 'other',      label: 'Other teaching tools',  note: 'General-purpose tools some teachers use', categories: ['engagement-standalone', 'counseling'] }
   ],
   everything: [
     { id: 'teach',      label: 'Sign in & teach today', note: 'Everything you need for class to happen', categories: ['signin', 'lms-core', 'display', 'ai-tutoring'] },
     { id: 'safety',     label: 'Safety & communication', note: 'Emergency notifications and safety systems', categories: ['safety-ops'] },
     { id: 'comm',       label: 'Email & communication', note: 'Outlook and Teams', categories: ['email-comm'] },
     { id: 'canvas',     label: 'Canvas integrations',   note: 'Tools that plug into Canvas for grading, practice, and assessment', categories: ['quiz-proctoring', 'plagiarism', 'analytics', 'practice-content', 'engagement-canvas'] },
-    { id: 'other',      label: 'Other teaching tools',  note: 'General-purpose tools some teachers use', categories: ['engagement-standalone'] },
+    { id: 'other',      label: 'Other teaching tools',  note: 'General-purpose tools some teachers use', categories: ['engagement-standalone', 'counseling'] },
     { id: 'operations', label: 'Operations',            note: 'Public website, athletics, and other institutional systems', categories: ['public-site', 'athletics'] },
     { id: 'infra',      label: 'Behind the scenes',     note: 'Infrastructure that runs the tools above — only matters if those go red too', categories: ['vendor-platform', 'infra'] }
   ],
   operations: [
     { id: 'safety',           label: 'Safety & communication', note: 'Emergency notifications and safety systems', categories: ['safety-ops'] },
     { id: 'daily',            label: 'Daily systems',          note: 'Sign-in and platforms used every day', categories: ['signin', 'lms-core'] },
-    { id: 'public',           label: 'Public-facing',          note: 'External websites and services', categories: ['public-site'] },
+    { id: 'public',           label: 'Public-facing',          note: 'External websites and services', categories: ['public-site', 'counseling'] },
     { id: 'athletics',        label: 'Athletics',              note: 'Athletic department systems', categories: ['athletics'] },
     { id: 'vendor-platforms', label: 'Vendor platforms',       note: 'Underlying platforms that power the systems above', categories: ['vendor-platform'] },
     { id: 'infra',            label: 'Behind the scenes',      note: 'Infrastructure that the platforms above run on', categories: ['infra'] }
@@ -1627,6 +1627,30 @@ const VENDORS = [
     pageUrl: 'https://atgenius.com/',
     whatItDoes: 'Web-based injury documentation (SOAP notes, concussion and return-to-play, treatment sign-in) used by the athletic trainers.',
     whenDown: 'Trainers may be unable to log evaluations, treatments, or concussion and RTP steps until service is restored. Records already saved remain intact. Affects the training room only.'
+  },
+
+  // Scoir — college counseling platform. Teachers upload letters of
+  // recommendation here and counselors send transcripts and school reports
+  // to colleges. No public status page (status.scoir.com does not resolve),
+  // so fetch-athletics-probes.yml runs a synthetic reachability check on the
+  // sign-in page. Added 2026-10-05 after a morning outage paused letter
+  // uploads and the dashboard had no way to show it.
+  // Limitation: app.scoir.com is a web app, so a 200 on the sign-in shell
+  // proves the front door is up, not that uploads work. A full outage shows
+  // red; a partial (site loads, uploads fail) can still read green.
+  {
+    id: 'scoir',
+    task: 'operations',
+    category: 'counseling',
+    name: 'Scoir',
+    sub: 'College counseling — synthetic reachability check',
+    tier: 'secondary',
+    audience: ['teaching', 'operations'],
+    type: 'syntheticprobe',
+    apiUrl: 'scoir.json',
+    pageUrl: 'https://app.scoir.com/signin',
+    whatItDoes: 'College counseling platform. Teachers upload letters of recommendation; counselors send transcripts and school reports to colleges; seniors manage their college lists and applications.',
+    whenDown: 'Letter uploads and application materials can\'t be sent. Hold letters and upload once Scoir is back; College Counseling will confirm when it\'s working. Heaviest impact in September through November (early action and decision deadlines).'
   },
 
   // RJ Website — synthetic check on the public regisjesuit.com URL.
@@ -2695,8 +2719,8 @@ async function fetchRJWebsite(vendor) {
 }
 
 // Generic synthetic-probe snapshot (type 'syntheticprobe'):
-//   For athletics tools with no public status page (MaxPreps, Neptune,
-//   ATGenius). Each JSON is written by fetch-athletics-probes.yml every
+//   For tools with no public status page (MaxPreps, Neptune, ATGenius,
+//   Scoir, and others). Each JSON is written by fetch-athletics-probes.yml every
 //   5 minutes from a server-side HTTP check. Schema mirrors the RJ Website
 //   probe: severity + statusLabel/statusDetail, with parseError when the
 //   probe itself is broken (e.g., the target URL moved). Same-origin fetch.

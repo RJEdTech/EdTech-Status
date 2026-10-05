@@ -52,6 +52,7 @@ Microsoft 365 is critical because Entra sign-in is the foundation everything els
 - MaxPreps
 - Neptune GameTime
 - ATGenius
+- Scoir (college counseling — letters of recommendation)
 
 **Infrastructure (2) — platforms our tools run on.**
 
@@ -118,7 +119,7 @@ The summary banner counts these separately. A line like *"2 tools reporting issu
 
 **Microsoft 365 is a link-only tile.** There is no automated M365 signal on this dashboard. The tile links to Microsoft's public status page and is checked manually. Because M365 sits in the critical tier, verify it directly when sign-in, mail, files, or Teams are the reported symptom.
 
-**Synthetic probes measure reachability, not correctness.** MyRJ, RJ Website, ArbiterSports, MaxPreps, Neptune, and ATGenius have no usable public status page, so we run server-side HTTP checks instead. A green tile means the endpoint responded as expected — it does not prove the application behind it is working correctly. Neptune in particular checks the vendor's web and licensing side; the game-day media player runs locally in the gym and is outside what we can see.
+**Synthetic probes measure reachability, not correctness.** MyRJ, RJ Website, ArbiterSports, MaxPreps, Neptune, ATGenius, and Scoir have no usable public status page, so we run server-side HTTP checks instead. A green tile means the endpoint responded as expected — it does not prove the application behind it is working correctly. Neptune in particular checks the vendor's web and licensing side; the game-day media player runs locally in the gym and is outside what we can see.
 
 **Cached fallback.** If a vendor's API is unreachable for any reason (CORS, vendor outage, network), the tile shows the most recent cached value with a "(cached)" label rather than going blank.
 
@@ -170,7 +171,7 @@ Nine workflows run every five minutes, parse results server-side, and commit a s
 | `fetch-myrj.yml` | `myrj.json` | Synthetic check on the faculty login redirect chain, stopping at Blackbaud ID. We stop there on purpose — following the further redirect to Microsoft sign-in would double-count M365 outages. |
 | `fetch-rj-website.yml` | `rj-website.json` | Synthetic check on `regisjesuit.com`. |
 | `fetch-arbitersports.yml` | `arbitersports.json` | No usable status page (Pingdom blocks unauthenticated access; Downdetector blocks runner IPs). Runs an auth-aware synthetic probe against the login flow and the application independently, since they can fail separately. The tile rolls up to worst-of and breaks the two out on expand. |
-| `fetch-athletics-probes.yml` | `maxpreps.json`, `neptune.json`, `atgenius.json` | Three small athletics vendors with no status pages, probed by one workflow. |
+| `fetch-athletics-probes.yml` | `maxpreps.json`, `neptune.json`, `atgenius.json`, `scoir.json`, and others | Vendors with no status pages (athletics, Flint, Swank, Project STEM, VHL, KWL Hub, Scoir), probed by one workflow. |
 
 Snapshot workflows commit only when the status content actually changes — not on every timestamp tick — so the repo doesn't fill with noise commits.
 
