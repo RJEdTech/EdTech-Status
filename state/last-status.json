@@ -1,19 +1,19 @@
 {
-  "checkedAt": "2026-10-06T07:43:03.725Z",
+  "checkedAt": "2026-10-06T14:29:50.221Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "degraded",
+    "blackbaud": "breakage",
     "myrj": "operational",
-    "vivi": "operational",
+    "vivi": "breakage",
     "flint": "operational",
     "respondus": "operational",
-    "ruvna": "operational",
+    "ruvna": "breakage",
     "rj-website": "operational",
     "copyleaks": "operational",
-    "aspiredu": "operational",
-    "deltamath": "operational",
+    "aspiredu": "breakage",
+    "deltamath": "breakage",
     "finalsite": "operational",
-    "hudl": "operational",
+    "hudl": "breakage",
     "explorelearning": "operational",
     "gimkit": "operational",
     "soundtrap": "operational",
@@ -21,7 +21,7 @@
     "noredink": "operational",
     "vhlcentral": "operational",
     "kwlhub": "operational",
-    "autodesk": "operational",
+    "autodesk": "breakage",
     "onshape": "operational",
     "arbitersports": "operational",
     "maxpreps": "operational",
@@ -30,6 +30,6 @@
     "swank": "operational",
     "projectstem": "operational",
     "aws": "operational",
-    "cloudflare": "operational"
+    "cloudflare": "degraded"
   }
 }
