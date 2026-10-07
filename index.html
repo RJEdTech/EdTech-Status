@@ -857,13 +857,42 @@ body { background: var(--bg); }
 .status-row .dot.major       { color: var(--crit); }
 .status-row .dot.unknown     { color: var(--neutral); }
 .status-row .dot.breakage    { color: var(--slate); }
+
+/*RJMASTHEAD*/
+/* RJ Ed Tech masthead (suite standard, matches Raider Observation Console):
+   charcoal band + 6px Raider-red rule, full browser width; contents stay
+   aligned with the page column. Same in light and dark. */
+html{overflow-x:clip}
+.rj-masthead{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding-top:14px!important;padding-bottom:14px!important;margin-top:0!important;margin-bottom:34px!important;
+  border:0!important;background:none!important;color:#fff;color-scheme:dark}
+.rj-masthead::before{content:"";position:absolute;z-index:-1;top:0;bottom:-6px;left:calc(50% - 50vw);right:calc(50% - 50vw);
+  background:#2a2a2a;border-bottom:6px solid #C11430}
+.rj-masthead>.head-row{flex:1;align-items:center}
+body:not(.fs) .rj-masthead .hl,body:not(.fs) .rj-masthead .header-left,body:not(.fs) .rj-masthead .title-lock{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;gap:13px!important;min-width:0}
+.rj-masthead .rj-mark{height:40px;width:auto;display:block;flex-shrink:0}
+.rj-masthead .brand,.rj-masthead h1{color:#fff!important;-webkit-text-fill-color:#fff!important;background:none!important;
+  font-size:20px!important;font-weight:700!important;line-height:1.15!important;letter-spacing:0!important;margin:0!important}
+.rj-masthead .accent{color:inherit!important;-webkit-text-fill-color:inherit!important}
+.rj-masthead .tagline,.rj-masthead .subtitle,.rj-masthead .rjm-sub{color:#b8b8b8!important;font-size:10.5px!important;font-weight:400!important;
+  letter-spacing:.14em!important;text-transform:uppercase;margin:3px 0 0!important;line-height:1.45!important}
+.rj-masthead .last-checked{color:#b8b8b8!important}
+.rj-masthead a{color:#f2f2f2!important}
+body:not(.fs) .rj-masthead button,body:not(.fs) .rj-masthead select{background:rgba(255,255,255,.08)!important;color:#f2f2f2!important;
+  border:1px solid rgba(255,255,255,.22)!important}
+body:not(.fs) .rj-masthead select option{background:#2a2a2a;color:#f2f2f2}
+body.fs .rj-masthead{color-scheme:normal;margin-bottom:0!important}
+body.fs .rj-masthead::before{display:none}
+@media(max-width:600px){.rj-masthead .brand,.rj-masthead h1{font-size:17px!important}}
+@media print{.rj-masthead::before{display:none}.rj-masthead,.rj-masthead .brand,.rj-masthead h1{color:#000!important;-webkit-text-fill-color:#000!important}}
+/*/RJMASTHEAD*/
 </style>
 </head>
 <body>
 <div class="watermark" aria-hidden="true"></div>
 <div class="container">
 
-  <header class="page-head">
+  <header class="rj-masthead page-head">
 
     <div class="head-row">
       <div class="title-lock">
