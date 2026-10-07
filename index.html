@@ -188,8 +188,10 @@
   }
   /* Show only the variant that matches the current theme. */
   :root[data-theme="dark"]  .brand-logo-light { display: none; }
-  .rj-mark { height: 44px; width: auto; display: block; flex-shrink: 0; }
-  .title-lock { display: flex; align-items: center; gap: 14px; }
+  .rj-mark { height: 40px; width: auto; display: block; flex-shrink: 0; }
+  .title-lock { display: flex; align-items: center; gap: 0.85rem; }
+  .title-lock h1 { font-size: 26px; line-height: 1.15; }
+  .title-lock .subtitle { margin-top: 2px; }
   :root[data-theme="light"] .brand-logo-dark  { display: none; }
 
   .head-row {
@@ -802,7 +804,7 @@
      ====================================================================== */
   @media (max-width: 600px) {
     .container { padding: 20px 14px 40px 14px; }
-    h1 { font-size: 22px; }
+    h1, .title-lock h1 { font-size: 22px; }
     .grid { grid-template-columns: 1fr; }
     .meta { align-items: flex-start; }
     .head-row { align-items: flex-start; }
