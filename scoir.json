@@ -1,8 +1,8 @@
 {
-  "fetchedAt": "2026-10-05T20:30:34.000Z",
-  "severity": "unknown",
-  "statusLabel": "Awaiting first check",
-  "statusDetail": null,
+  "fetchedAt": "2026-10-07T20:11:46.487Z",
+  "severity": "operational",
+  "statusLabel": "Reachable",
+  "statusDetail": "HTTP 200",
   "parseError": null,
-  "lastSuccessfulParse": null
+  "lastSuccessfulParse": "2026-10-07T20:11:46.487Z"
 }
