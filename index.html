@@ -29,7 +29,7 @@
      Chrome (backgrounds, text, borders, accents) uses ONLY:
        - Raider Red  #C11430
        - White       #FFFFFF
-       - Black       #000000  (and a near-black #0f0f1a for dark mode bg)
+       - Black       #000000  (and a near-black #15161a for dark mode bg)
        - Neutral grays (true grays — no blue tint) for text/border hierarchy
      Status colors (green / amber / orange / red) are FUNCTIONAL — they
      appear only on status dots and incident accent borders. They aren't
@@ -39,9 +39,9 @@
   /* ----- DARK THEME (default) ----- */
   :root,
   :root[data-theme="dark"] {
-    --bg:          #0f0f1a;       /* near-black with a faint blue undertone, per RJ design system */
-    --surface:    #16161f;       /* tiles — slightly lifted from bg, no extra hue */
-    --surface-2:  #1c1c25;       /* hovered/elevated state */
+    --bg:          #15161a;       /* near-black with a faint blue undertone, per RJ design system */
+    --surface:    #1d1f24;       /* tiles — slightly lifted from bg, no extra hue */
+    --surface-2:  #24262c;       /* hovered/elevated state */
     --border:      rgba(255,255,255,0.08);
     --border-mid:  rgba(255,255,255,0.16);
     --border-strong: rgba(255,255,255,0.28);
@@ -83,9 +83,9 @@
     --border-mid:  rgba(0,0,0,0.20);
     --border-strong: rgba(0,0,0,0.32);
 
-    --ink:         #0f0f1a;
-    --ink-dim:     rgba(15,15,26,0.70);
-    --ink-mute:    rgba(15,15,26,0.48);
+    --ink:         #15161a;
+    --ink-dim:     rgba(21,22,26,0.70);
+    --ink-mute:    rgba(21,22,26,0.48);
 
     --red:         #C11430;
     --red-soft:    rgba(193,20,48,0.10);
@@ -809,7 +809,7 @@ body { background: var(--bg); }
 
 /* verdict hero */
 .plain-banner { border-radius: 16px; padding: 18px 20px; gap: 16px; align-items: center;
-  box-shadow: 0 2px 6px rgba(15,15,26,0.05), 0 12px 32px rgba(15,15,26,0.06); }
+  box-shadow: 0 2px 6px rgba(21,22,26,0.05), 0 12px 32px rgba(21,22,26,0.06); }
 :root[data-theme="dark"] .plain-banner { box-shadow: 0 2px 8px rgba(0,0,0,0.45), 0 16px 40px rgba(0,0,0,0.4); }
 .plain-banner-icon { width: 50px; height: 50px; border-radius: 50%; }
 .plain-banner-headline { font-size: 20px; font-weight: 750; letter-spacing: -0.3px; }
@@ -830,7 +830,7 @@ body { background: var(--bg); }
 
 /* tiles as clean elevated cards */
 .tile { border-radius: 12px; border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(15,15,26,0.05), 0 4px 14px rgba(15,15,26,0.04); }
+  box-shadow: 0 1px 2px rgba(21,22,26,0.05), 0 4px 14px rgba(21,22,26,0.04); }
 :root[data-theme="dark"] .tile { box-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 6px 18px rgba(0,0,0,0.3); }
 .tile.is-compact .tile-correlation { display: none; }
 
