@@ -2,7 +2,7 @@ name: Fetch reachability probes
 
 # Reachability probes for tools that have NO public status page:
 # MaxPreps, Neptune GameTime, ATGenius, Swank Digital Campus, Project STEM,
-# VHL Central, The KWL Hub, and Flint (the K-12 AI platform:
+# VHL Central, The KWL Hub, Scoir, and Flint (the K-12 AI platform:
 # status.flintk12.com just 302-redirects to an app sign-in, so there is no
 # public status JSON to read). Each is a server-side HTTP check
 # (classified by response, not by scraping a banner), written to its own JSON
@@ -79,6 +79,14 @@ jobs:
             // probeOnce follows redirects, so one target covers both hostnames.
             { name: 'VHL Central', url: 'https://www.vhlcentral.com/lti/keys', out: 'vhlcentral.json', forbiddenIsUp: true },
             { name: 'The KWL Hub', url: 'https://thekwlhub.com/',              out: 'kwlhub.json'     },
+            // Scoir — college counseling (letters of recommendation, transcripts).
+            // status.scoir.com does not resolve and there is no other public status
+            // source, so this is reachability of the sign-in page. It's a web-app
+            // shell: a full outage reads red, a partial one (page loads, uploads
+            // fail) can still read green. forbiddenIsUp because the edge may answer
+            // datacenter IPs with 401/403. Added 2026-10-05 after an outage paused
+            // letter uploads.
+            { name: 'Scoir',       url: 'https://app.scoir.com/signin',        out: 'scoir.json', forbiddenIsUp: true },
           ];
 
           const ATTEMPTS      = 3;      // best-of, to dampen single-request runner blips
@@ -243,5 +251,5 @@ jobs:
       - name: Commit and report
         uses: ./.github/actions/commit-snapshot
         with:
-          files: maxpreps.json neptune.json atgenius.json flint.json swank.json projectstem.json vhlcentral.json kwlhub.json
+          files: maxpreps.json neptune.json atgenius.json flint.json swank.json projectstem.json vhlcentral.json kwlhub.json scoir.json
           message: Update athletics probe snapshots
