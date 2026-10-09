@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-10-09T13:20:16.356Z",
+  "checkedAt": "2026-10-09T18:52:21.443Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "operational",
+    "blackbaud": "degraded",
     "myrj": "operational",
     "vivi": "operational",
     "flint": "operational",
@@ -22,7 +22,7 @@
     "vhlcentral": "operational",
     "kwlhub": "operational",
     "scoir": "operational",
-    "autodesk": "degraded",
+    "autodesk": "operational",
     "onshape": "operational",
     "arbitersports": "operational",
     "maxpreps": "operational",
@@ -31,6 +31,6 @@
     "swank": "operational",
     "projectstem": "operational",
     "aws": "operational",
-    "cloudflare": "operational"
+    "cloudflare": "degraded"
   }
 }
