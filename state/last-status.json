@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-15T15:46:24.965Z",
+  "checkedAt": "2026-10-15T19:25:31.013Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -7,7 +7,7 @@
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
-    "ruvna": "operational",
+    "ruvna": "degraded",
     "rj-website": "operational",
     "copyleaks": "degraded",
     "aspiredu": "operational",
