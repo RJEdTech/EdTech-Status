@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-10-15T22:32:13.205Z",
+  "checkedAt": "2026-10-16T00:41:34.915Z",
   "vendors": {
-    "instructure": "degraded",
+    "instructure": "operational",
     "blackbaud": "operational",
     "myrj": "operational",
     "vivi": "operational",
@@ -23,7 +23,7 @@
     "kwlhub": "operational",
     "scoir": "operational",
     "autodesk": "operational",
-    "onshape": "operational",
+    "onshape": "degraded",
     "arbitersports": "operational",
     "maxpreps": "operational",
     "neptune": "operational",
