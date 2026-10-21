@@ -1,12 +1,12 @@
 {
-  "checkedAt": "2026-10-20T22:37:23.190Z",
+  "checkedAt": "2026-10-21T00:52:52.383Z",
   "vendors": {
-    "instructure": "degraded",
-    "blackbaud": "operational",
+    "instructure": "operational",
+    "blackbaud": "degraded",
     "myrj": "operational",
     "vivi": "operational",
     "flint": "operational",
-    "respondus": "operational",
+    "respondus": "breakage",
     "ruvna": "operational",
     "rj-website": "operational",
     "copyleaks": "degraded",
