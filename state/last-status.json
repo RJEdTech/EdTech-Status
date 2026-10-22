@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-10-21T22:41:24.347Z",
+  "checkedAt": "2026-10-22T00:56:27.164Z",
   "vendors": {
-    "instructure": "degraded",
+    "instructure": "operational",
     "blackbaud": "operational",
     "myrj": "operational",
     "vivi": "operational",
@@ -27,10 +27,10 @@
     "arbitersports": "operational",
     "maxpreps": "operational",
     "neptune": "operational",
-    "atgenius": "major",
+    "atgenius": "operational",
     "swank": "operational",
     "projectstem": "operational",
     "aws": "operational",
-    "cloudflare": "operational"
+    "cloudflare": "degraded"
   }
 }
