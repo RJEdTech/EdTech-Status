@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-10-22T15:35:43.717Z",
+  "checkedAt": "2026-10-22T19:26:12.129Z",
   "vendors": {
-    "instructure": "operational",
+    "instructure": "degraded",
     "blackbaud": "operational",
     "myrj": "operational",
     "vivi": "operational",
@@ -31,6 +31,6 @@
     "swank": "operational",
     "projectstem": "operational",
     "aws": "operational",
-    "cloudflare": "operational"
+    "cloudflare": "partial"
   }
 }
