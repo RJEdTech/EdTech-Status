@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-22T00:56:27.164Z",
+  "checkedAt": "2026-10-22T05:36:28.768Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -27,10 +27,10 @@
     "arbitersports": "operational",
     "maxpreps": "operational",
     "neptune": "operational",
-    "atgenius": "operational",
+    "atgenius": "major",
     "swank": "operational",
     "projectstem": "operational",
     "aws": "operational",
-    "cloudflare": "degraded"
+    "cloudflare": "operational"
   }
 }
