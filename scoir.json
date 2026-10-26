@@ -1,8 +1,8 @@
 {
-  "fetchedAt": "2026-10-26T06:23:26.475Z",
-  "severity": "operational",
-  "statusLabel": "Reachable",
-  "statusDetail": "HTTP 200",
+  "fetchedAt": "2026-10-26T13:22:27.383Z",
+  "severity": "major",
+  "statusLabel": "Unreachable",
+  "statusDetail": "Protocol \"http:\" not supported. Expected \"https:\"",
   "parseError": null,
-  "lastSuccessfulParse": "2026-10-25T16:02:43.909Z"
+  "lastSuccessfulParse": "2026-10-26T13:22:27.383Z"
 }
