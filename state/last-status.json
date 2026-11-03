@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-11-02T20:48:42.251Z",
+  "checkedAt": "2026-11-03T02:41:07.971Z",
   "vendors": {
     "instructure": "operational",
-    "blackbaud": "degraded",
+    "blackbaud": "operational",
     "myrj": "operational",
     "vivi": "operational",
     "flint": "operational",
@@ -12,7 +12,7 @@
     "copyleaks": "degraded",
     "aspiredu": "operational",
     "deltamath": "operational",
-    "finalsite": "degraded",
+    "finalsite": "operational",
     "hudl": "operational",
     "explorelearning": "operational",
     "gimkit": "operational",
