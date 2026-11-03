@@ -1,8 +1,8 @@
 {
-  "fetchedAt": "2026-11-02T20:47:55.221Z",
-  "severity": "operational",
-  "statusLabel": "Reachable",
-  "statusDetail": "HTTP 200",
+  "fetchedAt": "2026-11-03T02:40:53.148Z",
+  "severity": "major",
+  "statusLabel": "Unreachable",
+  "statusDetail": "timeout after 10000ms",
   "parseError": null,
-  "lastSuccessfulParse": "2026-08-29T23:14:02.590Z"
+  "lastSuccessfulParse": "2026-11-03T02:40:53.148Z"
 }
