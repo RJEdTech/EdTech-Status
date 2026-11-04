@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-11-04T17:38:23.760Z",
+  "fetchedAt": "2026-11-04T22:51:19.701Z",
   "source": "synthetic-reachability (go.arbitersports.com + www1.arbitersports.com)",
   "severity": "operational",
   "services": [
@@ -17,5 +17,5 @@
     }
   ],
   "parseError": null,
-  "lastSuccessfulParse": "2026-11-04T17:38:23.760Z"
+  "lastSuccessfulParse": "2026-11-04T22:51:19.701Z"
 }
