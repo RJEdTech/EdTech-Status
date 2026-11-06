@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-11-06T18:09:55.409Z",
+  "fetchedAt": "2026-11-06T23:03:55.795Z",
   "source": "https://status.aws.amazon.com/rss/all.rss",
-  "severity": "operational",
-  "activeCount": 0,
-  "firstIncidentTitle": "",
+  "severity": "partial",
+  "activeCount": 1,
+  "firstIncidentTitle": "<![CDATA[Service impact: Elevated Launch Failures]]>",
   "parseError": null,
   "fetchTrouble": null,
-  "lastSuccessfulParse": "2026-11-06T18:09:55.409Z"
+  "lastSuccessfulParse": "2026-11-06T23:03:55.795Z"
 }
