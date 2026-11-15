@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-15T17:55:09.432Z",
+  "checkedAt": "2026-11-15T22:15:29.257Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -30,7 +30,7 @@
     "atgenius": "operational",
     "swank": "operational",
     "projectstem": "operational",
-    "aws": "operational",
+    "aws": "partial",
     "cloudflare": "operational"
   }
 }
