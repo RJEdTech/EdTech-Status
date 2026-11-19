@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-19T00:35:33.779Z",
+  "checkedAt": "2026-11-19T07:51:52.336Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "operational",
@@ -7,7 +7,7 @@
     "vivi": "operational",
     "flint": "operational",
     "respondus": "operational",
-    "ruvna": "degraded",
+    "ruvna": "operational",
     "rj-website": "operational",
     "copyleaks": "degraded",
     "aspiredu": "operational",
@@ -31,6 +31,6 @@
     "swank": "operational",
     "projectstem": "operational",
     "aws": "operational",
-    "cloudflare": "degraded"
+    "cloudflare": "operational"
   }
 }
