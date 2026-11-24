@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-24T06:11:42.931Z",
+  "checkedAt": "2026-11-24T17:47:43.102Z",
   "vendors": {
     "instructure": "operational",
     "blackbaud": "degraded",
@@ -9,7 +9,7 @@
     "respondus": "operational",
     "ruvna": "operational",
     "rj-website": "operational",
-    "copyleaks": "operational",
+    "copyleaks": "degraded",
     "aspiredu": "operational",
     "deltamath": "operational",
     "finalsite": "operational",
